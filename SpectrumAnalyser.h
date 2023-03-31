@@ -4,7 +4,7 @@
 // from TTree ft10/SIDDHARTA-2 TTree
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
-// Modified Thu Mar 31 2023 by Aleksander Khreptak
+// Modified Fri Mar 31 2023 by Aleksander Khreptak
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -13,6 +13,8 @@
 #include <TROOT.h>
 #include <TChain.h>
 #include <TFile.h>
+#include <TH1D.h>
+#include <TH2D.h>
 
 // Header file for the class stored in the TTree
 
@@ -85,8 +87,28 @@ public :
   virtual Bool_t   Notify();
   virtual void     Show(Long64_t entry = -1);
 
+  void             initHistograms(int rebin_factor = 1);
+  void             writeHistograms(const std::string& filename);
+
 private:
+  static const int NUM_BUSES = 6;    // Number of buses
+  static const int NUM_SDDS = 64;   // Number of SDDs
+  
+  // Binning for the ADC
+  int num_adc_bins = 10000;
+  const int MIN_ADC = 0;
+  const int MAX_ADC = 10000;
+
+  // Histograms
+  TH1D *h_adc[NUM_BUSES][NUM_SDDS], *h_adc_raw[NUM_BUSES][NUM_SDDS];
+  TH1D *h_xtalk[NUM_BUSES][NUM_SDDS];
+  TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
+
   std::string convertTime(time_t t);
+  bool crossTalkTiming(Short_t drift, Short_t drift_pre);
+  void sddHitMap(int sddnumber, int busnumber, int &column, int &row);
+  int SFERAnumber(int sdd);
+  
 };
 
 #endif  // SPECTRUM_ANALYSER_H
