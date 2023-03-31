@@ -21,6 +21,8 @@
 
 #include "SpectrumAnalyser.h"
 
+std::string checkExtension(const std::string& filename);
+
 int main(int argc, char* argv[]) {
   // Check the number of command-line arguments
   if (argc < 2) {
@@ -31,7 +33,7 @@ int main(int argc, char* argv[]) {
 
   // Set the input directory and input file name
   const std::string data_directory  = "${XRAYDATA}";
-  const std::string input_file_name = argv[1];
+  const std::string input_file_name = checkExtension(argv[1]);
   const std::string file_date       = input_file_name.substr(0, 8);  
   const std::string input_file_path = data_directory + "/" + file_date 
                                   + "/" + input_file_name;
@@ -65,4 +67,11 @@ int main(int argc, char* argv[]) {
   input_file_handle->Close();
 
   return 0;
+}
+
+std::string checkExtension(const std::string& filename) {
+  if (filename.substr(filename.size() - 5) != ".root") {
+    return filename + ".root";
+  }
+  return filename;
 }
