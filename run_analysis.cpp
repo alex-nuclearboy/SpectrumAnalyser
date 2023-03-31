@@ -20,6 +20,7 @@
 #include <TTree.h>
 
 #include "SpectrumAnalyser.h"
+#include "version.h"
 
 std::string checkExtension(const std::string& filename);
 
@@ -30,6 +31,8 @@ int main(int argc, char* argv[]) {
     std::cerr << "Usage: " << argv[0] << " [input file name]" << std::endl;
     return EXIT_FAILURE;
   }
+
+  printWelcomeMessage();
 
   // Set the input directory and input file name
   const std::string data_directory  = "${XRAYDATA}";
