@@ -73,7 +73,8 @@ int main(int argc, char* argv[]) {
   std::string output_file_name = input_file_name;
   std::string output_file_path = "output/rootfiles/histos_" + output_file_name;
   analyser.writeHistograms(output_file_path);
-  analyser.myFunction();
+  analyser.drawHistograms(output_file_name);
+
   // Deallocate memory used by the TFile object
   input_file_handle->Close();
 

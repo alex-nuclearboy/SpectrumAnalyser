@@ -100,14 +100,14 @@ public :
 
   void             initHistograms(int rebin_factor = 1);
   void             writeHistograms(const std::string& filename);
-  void             drawHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
+  void             draw1DHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
                                   TH1D* hist2[NUM_BUSES][NUM_SDDS], 
                                   TH1D* hist3[NUM_BUSES][NUM_SDDS]);
   void             draw2DHistograms(TH2D* hist1, TH2D* hist2, 
                                     TH2D* hist3, TH2D* hist4);
-  void             myFunction();
+  void             drawHistograms(std::string filename);
 
-  std::string output_file_name = "";
+  std::string output_file_name;
 
 private:
   // Histograms
@@ -119,7 +119,7 @@ private:
   bool      crossTalkTiming(Short_t drift, Short_t drift_pre);
   void      sddHitMap(int sddnumber, int busnumber, int &column, int &row);
   int       SFERAnumber(int sdd);
-  void      setHistogramStyle();
+  TStyle*   setHistogramStyle();
   TCanvas*  createCanvas(CanvasFormat format = CanvasFormat::Default, 
                          CanvasOrientation orientation = CanvasOrientation::Default, 
                          Int_t width = 800, Int_t height = 600);
@@ -127,7 +127,7 @@ private:
                                    TH1D* hist2[NUM_BUSES][NUM_SDDS], 
                                    TH1D* hist3[NUM_BUSES][NUM_SDDS], 
                                    TCanvas* canvas);
-  void      drawSDDMap(TH2D* hist, const TString& title, TCanvas* canvas);
+  void      drawSDDMap(TH2D* hist, const TString& title);
   
 };
 

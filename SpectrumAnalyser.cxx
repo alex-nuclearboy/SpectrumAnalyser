@@ -22,6 +22,7 @@
 #include <TStyle.h>
 #include <TPDF.h>
 #include <TCanvas.h>
+#include <TError.h>
 
 void SpectrumAnalyser::Loop()
 {
@@ -99,11 +100,6 @@ void SpectrumAnalyser::Loop()
   }
 }
 
-void SpectrumAnalyser::myFunction() {
-  drawHistograms(h_adc_raw, h_adc, h_xtalk);
-  draw2DHistograms(h_sdd_map,h_sdd_rate,h_sdd_rate_sig,h_sdd_rate_noise);
-}
-
 std::string SpectrumAnalyser::convertTime(time_t t)
 {
     std::stringstream ss;
@@ -155,7 +151,8 @@ void SpectrumAnalyser::initHistograms(int rebin_factor)
       "h_sdd_rate_noise", "h_sdd_rate_noise", 48, 1, 49, 8, 1, 9);
 }
 
-void SpectrumAnalyser::writeHistograms(const std::string& filename) {
+void SpectrumAnalyser::writeHistograms(const std::string& filename)
+{
   // Create the output file
   TFile* output_file = new TFile(filename.c_str(), "RECREATE");
   output_file->cd();
@@ -180,135 +177,171 @@ void SpectrumAnalyser::writeHistograms(const std::string& filename) {
   std::cout << "Output file: " << filename << std::endl;
 }
 
-void SpectrumAnalyser::setHistogramStyle() {
-   // Global histogram style settings
-  TStyle *style = new TStyle("style", "");
-  style->SetOptStat(kFALSE);
-  style->SetPadGridX(kTRUE);
-  style->SetPadGridY(kTRUE);
-  style->SetPadLeftMargin(0.1);
-  style->SetPadRightMargin(0.1);
-  style->SetPadBottomMargin(0.1);
-  style->SetPadTopMargin(0.1);
-  style->SetTitleSize(0.05,"XY");
-  style->SetTitleOffset(1,"X");
-  style->SetTitleOffset(1,"Y");
-  style->SetLabelSize(0.045,"XY");
-  style->SetTitleFont(42,"XYZ");
-  style->SetLabelFont(42,"XYZ");
-  style->SetTextFont(42);
-  gROOT->SetStyle("style");
-  gROOT->ForceStyle();
-  gROOT->SetBatch(kTRUE);
+void SpectrumAnalyser::drawHistograms(std::string filename)
+{
+  output_file_name = filename.substr(0, 38);
+  draw1DHistograms(h_adc_raw, h_adc, h_xtalk);
+  draw2DHistograms(h_sdd_map,h_sdd_rate,h_sdd_rate_sig,h_sdd_rate_noise);
 }
 
-TCanvas* SpectrumAnalyser::createCanvas(CanvasFormat format, CanvasOrientation orientation, Int_t width, Int_t height) {
-   Int_t canvas_width, canvas_height;
-   if (format == CanvasFormat::A4) {
-      canvas_width  = (orientation == CanvasOrientation::Landscape) ? 2339 : 1654;
-      canvas_height = (orientation == CanvasOrientation::Landscape) ? 1654 : 2339;
-   } 
-   else if (format == CanvasFormat::A5) { 
-      canvas_width  = (orientation == CanvasOrientation::Landscape) ? 1654 : 1169;
-      canvas_height = (orientation == CanvasOrientation::Landscape) ? 1169 : 1654;
-   } 
-   else if (format == CanvasFormat::Default) {
-      canvas_width  = width;
-      canvas_height = height;
-   } 
-   else {
-      std::cerr << "Invalid canvas format" << std::endl;
-      return nullptr;
-   }
-   auto canvas = std::make_unique<TCanvas>("canvas", "canvas", canvas_width, canvas_height);
-   return canvas.release();
+TStyle* SpectrumAnalyser::setHistogramStyle()
+{
+  // Global histogram style settings
+  static TStyle* style = []{
+    auto style = new TStyle("style", "");
+    style->SetOptStat(kFALSE);
+    style->SetPadGridX(kTRUE);
+    style->SetPadGridY(kTRUE);
+    style->SetPadLeftMargin(0.12);
+    style->SetPadRightMargin(0.12);
+    style->SetPadBottomMargin(0.12);
+    style->SetPadTopMargin(0.1);
+    style->SetTitleSize(0.05,"XY");
+    style->SetTitleOffset(1,"X");
+    style->SetTitleOffset(1,"Y");
+    style->SetLabelSize(0.045,"XY");
+    style->SetTitleFont(42,"XYZ");
+    style->SetLabelFont(42,"XYZ");
+    style->SetTextFont(42);
+    gROOT->SetStyle("style");
+    gROOT->ForceStyle();
+    gROOT->SetBatch(kTRUE);
+    return style;
+  }();
+  return style;
 }
 
-void SpectrumAnalyser::drawHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], TH1D* hist2[NUM_BUSES][NUM_SDDS], TH1D* hist3[NUM_BUSES][NUM_SDDS]) {
-   setHistogramStyle();
-   TCanvas* canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
-   TPDF* pdf = new TPDF(Form("output/plots/hADC_spectra_%s.pdf", output_file_name.c_str()));
-   drawSpectrumHistograms(hist1, hist2, hist3, canvas);   
-   pdf->Close();   
-   canvas->Close(); 
-   std::cout << "Histograms have been saved to hADC_spectra_" << output_file_name.c_str() << ".pdf" << std::endl;
-   // Clean up memory
-   delete canvas;
-   delete pdf;
+TCanvas* SpectrumAnalyser::createCanvas(
+    CanvasFormat format, CanvasOrientation orientation, 
+    Int_t width, Int_t height)
+{
+  Int_t canvas_width, canvas_height;
+  if (format == CanvasFormat::A4) {
+    canvas_width  = (orientation == CanvasOrientation::Landscape) ? 2339 : 1654;
+    canvas_height = (orientation == CanvasOrientation::Landscape) ? 1654 : 2339;
+  } else if (format == CanvasFormat::A5) {
+    canvas_width  = (orientation == CanvasOrientation::Landscape) ? 1654 : 1169;
+    canvas_height = (orientation == CanvasOrientation::Landscape) ? 1169 : 1654;
+  } else if (format == CanvasFormat::Default) {
+    canvas_width  = width;
+    canvas_height = height;
+  } else {
+    std::cerr << "Invalid canvas format" << std::endl;
+    return nullptr;
+  }
+  auto canvas = std::make_unique<TCanvas>("canvas", "canvas", 
+                                          canvas_width, canvas_height);
+  return canvas.release();
 }
 
-void SpectrumAnalyser::drawSpectrumHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], TH1D* hist2[NUM_BUSES][NUM_SDDS], TH1D* hist3[NUM_BUSES][NUM_SDDS], TCanvas* canvas) {
-   const Int_t kNumCols = 2;
-   const Int_t kNumRows = 4;   
-   const Int_t kXMin    = 1500;
-   const Int_t kXMax    = 4500;
-   
-   for (Int_t iBUS = 0; iBUS < NUM_BUSES; ++iBUS) {
-      for (Int_t iSDD = 0; iSDD < NUM_SDDS; ++iSDD) {
-         // Create a new page for every 8 SDDs
-         if (iSDD % 8 == 0) {                       
-            canvas->Clear();
-            canvas->Divide(kNumCols, kNumRows);                   
-         }         
-         // Create histograms and add them to the canvas
-         canvas->cd((iSDD % 8) + 1);
-         gPad->SetLogy();         
-         if (hist1[iBUS][iSDD]->GetEntries() <= 100) continue; // skip empty histograms
-         hist1[iBUS][iSDD]->SetTitle(Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", iBUS+1, iSDD+1));
-         hist1[iBUS][iSDD]->GetXaxis()->SetRangeUser(kXMin, kXMax);
-         hist1[iBUS][iSDD]->UseCurrentStyle();
-         //hist1[iBUS][iSDD]->SetLineColor(kBlue);
-         hist2[iBUS][iSDD]->SetLineColor(kRed);
-         hist3[iBUS][iSDD]->SetLineColor(kBlack);         
-         hist1[iBUS][iSDD]->Draw("HIST");
-         hist2[iBUS][iSDD]->Draw("HIST SAME");
-         hist3[iBUS][iSDD]->Draw("HIST SAME");
-         canvas->Update();
+void SpectrumAnalyser::draw1DHistograms(
+    TH1D* hist1[NUM_BUSES][NUM_SDDS], TH1D* hist2[NUM_BUSES][NUM_SDDS], 
+    TH1D* hist3[NUM_BUSES][NUM_SDDS]) 
+{
+  setHistogramStyle();
+  TCanvas* canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
+  TPDF* pdf = new TPDF(
+      Form("output/plots/hADC_spectra_%s.pdf", output_file_name.c_str()));
+  drawSpectrumHistograms(hist1, hist2, hist3, canvas);
+  pdf->Close();
+  canvas->Close();
+  std::cout << "Histograms have been saved to hADC_spectra_" 
+            << output_file_name.c_str() << ".pdf" << std::endl;
+  // Clean up memory
+  delete canvas;
+  delete pdf;
+}
+
+void SpectrumAnalyser::drawSpectrumHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
+                                              TH1D* hist2[NUM_BUSES][NUM_SDDS], 
+                                              TH1D* hist3[NUM_BUSES][NUM_SDDS], 
+                                              TCanvas* canvas)
+{
+  const Int_t kNumCols = 2;
+  const Int_t kNumRows = 4;
+  const Int_t kXMin    = 1500;
+  const Int_t kXMax    = 4500;
+
+  for (Int_t iBUS = 0; iBUS < NUM_BUSES; ++iBUS) {
+    for (Int_t iSDD = 0; iSDD < NUM_SDDS; ++iSDD) {
+    // Create a new page for every 8 SDDs
+      if (iSDD % 8 == 0) {
+        canvas->Clear();
+        canvas->Divide(kNumCols, kNumRows);
       }
-   }   
+      // Create histograms and add them to the canvas
+      canvas->cd((iSDD % 8) + 1);
+      gPad->SetLogy();
+      if (hist1[iBUS][iSDD]->GetEntries() <= 100) continue; // skip empty histo
+      hist1[iBUS][iSDD]->SetTitle(
+          Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", 
+                iBUS+1, iSDD+1));
+      hist1[iBUS][iSDD]->GetXaxis()->SetRangeUser(kXMin, kXMax);
+      hist1[iBUS][iSDD]->UseCurrentStyle();
+      hist1[iBUS][iSDD]->SetLineColor(kBlue);
+      hist2[iBUS][iSDD]->SetLineColor(kRed);
+      hist3[iBUS][iSDD]->SetLineColor(kBlack);
+      hist1[iBUS][iSDD]->Draw("HIST");
+      hist2[iBUS][iSDD]->Draw("HIST SAME");
+      hist3[iBUS][iSDD]->Draw("HIST SAME");
+      canvas->Update();
+    }
+  }
 }
 
-void SpectrumAnalyser::draw2DHistograms(TH2D* hist1, TH2D* hist2, TH2D* hist3, TH2D* hist4) {
-   setHistogramStyle();
-   TCanvas* canvas = createCanvas(CanvasFormat::A5, CanvasOrientation::Landscape);
-   TPDF* pdf = new TPDF(Form("output/plots/hSDDmap_%s.pdf", output_file_name.c_str()));
-   drawSDDMap(hist1,"SDD positions around the target", canvas);
-   drawSDDMap(hist2,"Map of SDD counts around the target", canvas);
-   drawSDDMap(hist3,"Map of SDD signal counts around the target", canvas);
-   drawSDDMap(hist4,"Map of SDD noise counts around the target", canvas);
-   pdf->Close();
-   canvas->Close();
-   std::cout << "Histograms have been saved to hSDDmap_" << output_file_name.c_str() << ".pdf" << std::endl;
-   // Clean up memory
-   delete canvas;
-   delete pdf;
+void SpectrumAnalyser::draw2DHistograms(TH2D* hist1, TH2D* hist2, 
+                                        TH2D* hist3, TH2D* hist4)
+{
+  setHistogramStyle();
+
+  // Disable "Info in <TCanvas::Print>" message
+  gErrorIgnoreLevel = kWarning;
+
+  // Create a canvas and draw histograms
+  auto canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Landscape);
+  canvas->Divide(2, 2);
+  canvas->cd(1);
+  drawSDDMap(hist1,"SDD positions around the target");
+  canvas->cd(2);
+  drawSDDMap(hist2,"Map of SDD counts around the target");
+  canvas->cd(3);
+  drawSDDMap(hist3,"Map of SDD signal counts around the target");
+  canvas->cd(4);
+  drawSDDMap(hist4,"Map of SDD noise counts around the target");
+
+  // Save canvas as image
+  canvas->SaveAs(Form("output/plots/hSDD_map_%s.pdf", output_file_name.c_str()));
+
+  std::cout << "Histograms have been saved to hSDD_map_" 
+            << output_file_name.c_str() << ".pdf" << std::endl;
 }
 
-void SpectrumAnalyser::drawSDDMap(TH2D* hist, const TString& title, TCanvas* canvas) {
-   canvas->cd();
-   hist->SetTitle(title);
-   hist->GetXaxis()->SetTitle("column");
-   hist->GetYaxis()->SetTitle("row");
-   hist->UseCurrentStyle();
-   hist->Draw("colz");
-   canvas->Update();
+void SpectrumAnalyser::drawSDDMap(TH2D* hist, const TString& title) 
+{
+  hist->SetTitle(title);
+  hist->GetXaxis()->SetTitle("column");
+  hist->GetYaxis()->SetTitle("row");
+  hist->UseCurrentStyle();
+  hist->Draw("COLZ");
 }
 
 
 
-bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre) {
+bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre) 
+{
   bool ISGOODtime = true;
   int t1 = 0, t2 = 0, timediff = 0;
   t1 = drift + 32768;
   t2 = drift_pre + 32768.;
   if (t1 > t2) {timediff = t1 - t2;}
   if (t2 > t1) {timediff = t1 + (32768.*2) - t2;}
-  if ((timediff > 0. && timediff < 625.)) {ISGOODtime = false;}   // 625 -> 5 microseconds
+  if ((timediff > 0. && timediff < 625.)) {ISGOODtime = false;} // 625 -> 5 microseconds
   return ISGOODtime;
 }
 
 void SpectrumAnalyser::sddHitMap(int sddnumber, int busnumber,
-                                    int &column, int &row) {
+                                    int &column, int &row) 
+{
   row = 0; column = 0;
   int SFERA = 0;
 
@@ -336,7 +369,8 @@ void SpectrumAnalyser::sddHitMap(int sddnumber, int busnumber,
   if (sddnumber == 16)  {row = 8; column = 2 + SFERA + ((busnumber - 1)*8);}
 }
 
-int SpectrumAnalyser::SFERAnumber(int sdd) {
+int SpectrumAnalyser::SFERAnumber(int sdd) 
+{
   int SFERA = 0;
   if (sdd <= 16) {SFERA = 1;}
   if (sdd >= 17 && sdd <= 32) {SFERA = 2;}
