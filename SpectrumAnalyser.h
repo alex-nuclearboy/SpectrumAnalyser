@@ -77,6 +77,17 @@ public :
 
   UInt_t runtime = 0;
 
+  static const int NUM_BUSES  = 6;    // Number of buses
+  static const int NUM_SDDS   = 64;   // Number of SDDs
+  
+  // Binning for the ADC
+  int num_adc_bins = 10000;
+  const int MIN_ADC = 0;
+  const int MAX_ADC = 10000;
+
+  enum class CanvasFormat { Default, A4, A5 };
+  enum class CanvasOrientation { Default, Landscape, Portrait };
+
   SpectrumAnalyser(TTree *tree = 0);
   virtual ~SpectrumAnalyser();
   virtual Int_t    Cut(Long64_t entry);
@@ -89,25 +100,34 @@ public :
 
   void             initHistograms(int rebin_factor = 1);
   void             writeHistograms(const std::string& filename);
+  void             drawHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
+                                  TH1D* hist2[NUM_BUSES][NUM_SDDS], 
+                                  TH1D* hist3[NUM_BUSES][NUM_SDDS]);
+  void             draw2DHistograms(TH2D* hist1, TH2D* hist2, 
+                                    TH2D* hist3, TH2D* hist4);
+  void             myFunction();
+
+  std::string output_file_name = "";
 
 private:
-  static const int NUM_BUSES = 6;    // Number of buses
-  static const int NUM_SDDS = 64;   // Number of SDDs
-  
-  // Binning for the ADC
-  int num_adc_bins = 10000;
-  const int MIN_ADC = 0;
-  const int MAX_ADC = 10000;
-
   // Histograms
   TH1D *h_adc[NUM_BUSES][NUM_SDDS], *h_adc_raw[NUM_BUSES][NUM_SDDS];
   TH1D *h_xtalk[NUM_BUSES][NUM_SDDS];
   TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
 
   std::string convertTime(time_t t);
-  bool crossTalkTiming(Short_t drift, Short_t drift_pre);
-  void sddHitMap(int sddnumber, int busnumber, int &column, int &row);
-  int SFERAnumber(int sdd);
+  bool      crossTalkTiming(Short_t drift, Short_t drift_pre);
+  void      sddHitMap(int sddnumber, int busnumber, int &column, int &row);
+  int       SFERAnumber(int sdd);
+  void      setHistogramStyle();
+  TCanvas*  createCanvas(CanvasFormat format = CanvasFormat::Default, 
+                         CanvasOrientation orientation = CanvasOrientation::Default, 
+                         Int_t width = 800, Int_t height = 600);
+  void      drawSpectrumHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
+                                   TH1D* hist2[NUM_BUSES][NUM_SDDS], 
+                                   TH1D* hist3[NUM_BUSES][NUM_SDDS], 
+                                   TCanvas* canvas);
+  void      drawSDDMap(TH2D* hist, const TString& title, TCanvas* canvas);
   
 };
 
