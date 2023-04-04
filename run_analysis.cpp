@@ -2,7 +2,7 @@
 * File:         run_analysis.cpp
 * Author:       Aleksander Khreptak <aleksander.khreptak@lnf.infn.it>
 * Created:      31 Mar 2023
-* Last updated: 01 Apr 2023
+* Last updated: 04 Apr 2023
 *
 * Description:
 * This program performs analysis on SDD data using the SpectrumAnalyser class
@@ -70,11 +70,13 @@ int main(int argc, char* argv[]) {
   analyser.Loop();
   
   // Set the output file name
-  std::string output_file_name = input_file_name;
-  std::string output_file_path = "output/rootfiles/histos_" + output_file_name;
-  analyser.writeHistograms(output_file_path);
-  analyser.drawHistograms(output_file_name);
+  std::string output_file_name = input_file_name.substr(0, 38);
+  std::string output_file_path = "output/rootfiles/histos_" + input_file_name;
 
+  analyser.writeHistograms(output_file_path);
+  analyser.drawADCSpectra(output_file_name);
+  analyser.drawSDDMap(output_file_name);
+  
   // Deallocate memory used by the TFile object
   input_file_handle->Close();
 

@@ -100,34 +100,26 @@ public :
 
   void             initHistograms(int rebin_factor = 1);
   void             writeHistograms(const std::string& filename);
-  void             draw1DHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
-                                  TH1D* hist2[NUM_BUSES][NUM_SDDS], 
-                                  TH1D* hist3[NUM_BUSES][NUM_SDDS]);
-  void             draw2DHistograms(TH2D* hist1, TH2D* hist2, 
-                                    TH2D* hist3, TH2D* hist4);
-  void             drawHistograms(std::string filename);
-
-  std::string output_file_name;
-
+  void             drawADCSpectra(const std::string& filename);
+  void             drawSDDMap(const std::string& filename);
+    
 private:
   // Histograms
   TH1D *h_adc[NUM_BUSES][NUM_SDDS], *h_adc_raw[NUM_BUSES][NUM_SDDS];
   TH1D *h_xtalk[NUM_BUSES][NUM_SDDS];
   TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
-
+  
   std::string convertTime(time_t t);
-  bool      crossTalkTiming(Short_t drift, Short_t drift_pre);
-  void      sddHitMap(int sddnumber, int busnumber, int &column, int &row);
-  int       SFERAnumber(int sdd);
-  TStyle*   setHistogramStyle();
-  TCanvas*  createCanvas(CanvasFormat format = CanvasFormat::Default, 
-                         CanvasOrientation orientation = CanvasOrientation::Default, 
-                         Int_t width = 800, Int_t height = 600);
-  void      drawSpectrumHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
-                                   TH1D* hist2[NUM_BUSES][NUM_SDDS], 
-                                   TH1D* hist3[NUM_BUSES][NUM_SDDS], 
-                                   TCanvas* canvas);
-  void      drawSDDMap(TH2D* hist, const TString& title);
+  bool        crossTalkTiming(Short_t drift, Short_t drift_pre);
+  void        sddHitMap(int sddnumber, int busnumber, int &column, int &row);
+  int         SFERAnumber(int sdd);
+  TStyle*     setHistogramStyle();
+  TCanvas*    createCanvas(
+                  CanvasFormat format = CanvasFormat::Default,
+                  CanvasOrientation orientation = CanvasOrientation::Default,
+                  int width = 800, int height = 600);
+  void        drawSpectrum(TCanvas* canvas);
+  void        draw2DHistogram(TH2D* hist, const std::string& title);
   
 };
 

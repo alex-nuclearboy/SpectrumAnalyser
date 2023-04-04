@@ -2,7 +2,7 @@
 * File:         SpectrumAnalyser.cxx
 * Author:       Aleksander Khreptak <aleksander.khreptak@lnf.infn.it>
 * Created:      31 Mar 2023
-* Last updated: 03 Apr 2023
+* Last updated: 04 Apr 2023
 *
 * Description:
 * This file implements a SpectrumAnalyser class that is used
@@ -71,7 +71,9 @@ void SpectrumAnalyser::Loop()
     for (Int_t ihit = 0; ihit < nhits; ++ihit) {
       h_adc_raw[bus[ihit]-1][sdd[ihit]-1]->Fill(adc[ihit]);
       ISGOODtime = true;
-      if (ihit > 0) {ISGOODtime = crossTalkTiming(drift[ihit], drift[ihit-1]);}
+      if (ihit > 0) {
+        ISGOODtime = crossTalkTiming(drift[ihit], drift[ihit-1]);
+      }
       if (ISGOODtime) {
         h_adc[bus[ihit]-1][sdd[ihit]-1]->Fill(adc[ihit]);
       } else {
@@ -80,8 +82,8 @@ void SpectrumAnalyser::Loop()
       sddHitMap(sdd[ihit], bus[ihit], column, row);
       h_sdd_map->SetBinContent(column, row, sdd[ihit]);
       h_sdd_rate->Fill(column, row);
-      if (adc[ihit] > 1200) {h_sdd_rate_sig->Fill(column, row);}
-      if (adc[ihit] <= 1200) {h_sdd_rate_noise->Fill(column, row);}
+      if (adc[ihit] > 1200) { h_sdd_rate_sig->Fill(column, row); }
+      if (adc[ihit] <= 1200) { h_sdd_rate_noise->Fill(column, row); }
     }
   }
 
@@ -177,13 +179,6 @@ void SpectrumAnalyser::writeHistograms(const std::string& filename)
   std::cout << "Output file: " << filename << std::endl;
 }
 
-void SpectrumAnalyser::drawHistograms(std::string filename)
-{
-  output_file_name = filename.substr(0, 38);
-  draw1DHistograms(h_adc_raw, h_adc, h_xtalk);
-  draw2DHistograms(h_sdd_map,h_sdd_rate,h_sdd_rate_sig,h_sdd_rate_noise);
-}
-
 TStyle* SpectrumAnalyser::setHistogramStyle()
 {
   // Global histogram style settings
@@ -213,119 +208,123 @@ TStyle* SpectrumAnalyser::setHistogramStyle()
 
 TCanvas* SpectrumAnalyser::createCanvas(
     CanvasFormat format, CanvasOrientation orientation, 
-    Int_t width, Int_t height)
+    int width, int height)
 {
-  Int_t canvas_width, canvas_height;
-  if (format == CanvasFormat::A4) {
-    canvas_width  = (orientation == CanvasOrientation::Landscape) ? 2339 : 1654;
+  setHistogramStyle();
+  int canvas_width, canvas_height;
+  switch (format) {
+  case CanvasFormat::A4:
+    canvas_width = (orientation == CanvasOrientation::Landscape) ? 2339 : 1654;
     canvas_height = (orientation == CanvasOrientation::Landscape) ? 1654 : 2339;
-  } else if (format == CanvasFormat::A5) {
-    canvas_width  = (orientation == CanvasOrientation::Landscape) ? 1654 : 1169;
+    break;
+  case CanvasFormat::A5:
+    canvas_width = (orientation == CanvasOrientation::Landscape) ? 1654 : 1169;
     canvas_height = (orientation == CanvasOrientation::Landscape) ? 1169 : 1654;
-  } else if (format == CanvasFormat::Default) {
-    canvas_width  = width;
+    break;
+  case CanvasFormat::Default:
+    canvas_width = width;
     canvas_height = height;
-  } else {
+    break;
+  default:
     std::cerr << "Invalid canvas format" << std::endl;
     return nullptr;
   }
-  auto canvas = std::make_unique<TCanvas>("canvas", "canvas", 
-                                          canvas_width, canvas_height);
+  auto canvas = std::unique_ptr<TCanvas>(new TCanvas("canvas", "canvas", 
+                                         canvas_width, canvas_height));  
   return canvas.release();
 }
 
-void SpectrumAnalyser::draw1DHistograms(
-    TH1D* hist1[NUM_BUSES][NUM_SDDS], TH1D* hist2[NUM_BUSES][NUM_SDDS], 
-    TH1D* hist3[NUM_BUSES][NUM_SDDS]) 
-{
-  setHistogramStyle();
-  TCanvas* canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
-  TPDF* pdf = new TPDF(
-      Form("output/plots/hADC_spectra_%s.pdf", output_file_name.c_str()));
-  drawSpectrumHistograms(hist1, hist2, hist3, canvas);
+void SpectrumAnalyser::drawADCSpectra(const std::string& filename) 
+{   
+  auto canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
+  auto pdf = std::make_unique<TPDF>(
+      Form("output/plots/hADC_spectra_%s.pdf", filename.c_str()));
+  drawSpectrum(canvas);
   pdf->Close();
   canvas->Close();
-  std::cout << "Histograms have been saved to hADC_spectra_" 
-            << output_file_name.c_str() << ".pdf" << std::endl;
-  // Clean up memory
-  delete canvas;
-  delete pdf;
+  std::cout << "ADC spectra have been saved to output/plots/hADC_spectra_" 
+            << filename.c_str() << ".pdf" << std::endl;
 }
 
-void SpectrumAnalyser::drawSpectrumHistograms(TH1D* hist1[NUM_BUSES][NUM_SDDS], 
-                                              TH1D* hist2[NUM_BUSES][NUM_SDDS], 
-                                              TH1D* hist3[NUM_BUSES][NUM_SDDS], 
-                                              TCanvas* canvas)
+void SpectrumAnalyser::drawSpectrum(TCanvas* canvas)
 {
-  const Int_t kNumCols = 2;
-  const Int_t kNumRows = 4;
-  const Int_t kXMin    = 1500;
-  const Int_t kXMax    = 4500;
+  const int NUM_COLUMNS = 2;
+  const int NUM_ROWS    = 4;
+  const int X_MIN = 1500;
+  const int X_MAX = 4500;
+  
+  for (int bus_idx = 0; bus_idx < NUM_BUSES; ++bus_idx) {
+    for (int sdd_idx = 0; sdd_idx < NUM_SDDS; ++sdd_idx) {
+      // Clone histograms
+      auto hist1 = dynamic_cast<TH1D*>(h_adc_raw[bus_idx][sdd_idx]->Clone());
+      auto hist2 = dynamic_cast<TH1D*>(h_adc[bus_idx][sdd_idx]->Clone());
+      auto hist3 = dynamic_cast<TH1D*>(h_xtalk[bus_idx][sdd_idx]->Clone());
 
-  for (Int_t iBUS = 0; iBUS < NUM_BUSES; ++iBUS) {
-    for (Int_t iSDD = 0; iSDD < NUM_SDDS; ++iSDD) {
-    // Create a new page for every 8 SDDs
-      if (iSDD % 8 == 0) {
+      // Create a new page for every 8 SDDs
+      if (sdd_idx % 8 == 0) {
         canvas->Clear();
-        canvas->Divide(kNumCols, kNumRows);
+        canvas->Divide(NUM_COLUMNS, NUM_ROWS);
       }
-      // Create histograms and add them to the canvas
-      canvas->cd((iSDD % 8) + 1);
+      // Add histograms to the canvas
+      canvas->cd((sdd_idx % 8) + 1);
       gPad->SetLogy();
-      if (hist1[iBUS][iSDD]->GetEntries() <= 100) continue; // skip empty histo
-      hist1[iBUS][iSDD]->SetTitle(
+      if (hist1->GetEntries() <= 100) continue; // skip empty histo
+      hist1->SetTitle(
           Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", 
-                iBUS+1, iSDD+1));
-      hist1[iBUS][iSDD]->GetXaxis()->SetRangeUser(kXMin, kXMax);
-      hist1[iBUS][iSDD]->UseCurrentStyle();
-      hist1[iBUS][iSDD]->SetLineColor(kBlue);
-      hist2[iBUS][iSDD]->SetLineColor(kRed);
-      hist3[iBUS][iSDD]->SetLineColor(kBlack);
-      hist1[iBUS][iSDD]->Draw("HIST");
-      hist2[iBUS][iSDD]->Draw("HIST SAME");
-      hist3[iBUS][iSDD]->Draw("HIST SAME");
+                bus_idx+1, sdd_idx+1));
+      hist1->GetXaxis()->SetRangeUser(X_MIN, X_MAX);
+      hist1->UseCurrentStyle();
+      hist1->SetLineColor(kBlue);
+      hist2->SetLineColor(kRed);
+      hist3->SetLineColor(kBlack);
+      hist1->Draw("HIST");
+      hist2->Draw("HIST SAME");
+      hist3->Draw("HIST SAME");
       canvas->Update();
     }
   }
 }
 
-void SpectrumAnalyser::draw2DHistograms(TH2D* hist1, TH2D* hist2, 
-                                        TH2D* hist3, TH2D* hist4)
+void SpectrumAnalyser::drawSDDMap(const std::string& filename)
 {
-  setHistogramStyle();
-
   // Disable "Info in <TCanvas::Print>" message
   gErrorIgnoreLevel = kWarning;
 
+  // Clone histograms
+  auto hist1 = dynamic_cast<TH2D*>(h_sdd_map->Clone());
+  auto hist2 = dynamic_cast<TH2D*>(h_sdd_rate->Clone());
+  auto hist3 = dynamic_cast<TH2D*>(h_sdd_rate_sig->Clone());
+  auto hist4 = dynamic_cast<TH2D*>(h_sdd_rate_noise->Clone());
+
   // Create a canvas and draw histograms
-  auto canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Landscape);
+  static auto canvas = createCanvas(CanvasFormat::A4, 
+                                    CanvasOrientation::Landscape);
+  canvas->Clear();
   canvas->Divide(2, 2);
   canvas->cd(1);
-  drawSDDMap(hist1,"SDD positions around the target");
+  draw2DHistogram(hist1,"SDD positions around the target");
   canvas->cd(2);
-  drawSDDMap(hist2,"Map of SDD counts around the target");
+  draw2DHistogram(hist2,"Map of SDD counts around the target");
   canvas->cd(3);
-  drawSDDMap(hist3,"Map of SDD signal counts around the target");
+  draw2DHistogram(hist3,"Map of SDD signal counts around the target");
   canvas->cd(4);
-  drawSDDMap(hist4,"Map of SDD noise counts around the target");
+  draw2DHistogram(hist4,"Map of SDD noise counts around the target");
 
   // Save canvas as image
-  canvas->SaveAs(Form("output/plots/hSDD_map_%s.pdf", output_file_name.c_str()));
+  canvas->SaveAs(Form("output/plots/hSDD_map_%s.pdf", filename.c_str()));
 
-  std::cout << "Histograms have been saved to hSDD_map_" 
-            << output_file_name.c_str() << ".pdf" << std::endl;
+  std::cout << "2D histograms have been saved to output/plots/hSDD_map_" 
+            << filename.c_str() << ".pdf" << std::endl;
 }
 
-void SpectrumAnalyser::drawSDDMap(TH2D* hist, const TString& title) 
+void SpectrumAnalyser::draw2DHistogram(TH2D* hist, const std::string& title) 
 {
-  hist->SetTitle(title);
+  hist->SetTitle(title.c_str());
   hist->GetXaxis()->SetTitle("column");
   hist->GetYaxis()->SetTitle("row");
   hist->UseCurrentStyle();
   hist->Draw("COLZ");
 }
-
-
 
 bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre) 
 {
@@ -333,48 +332,48 @@ bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre)
   int t1 = 0, t2 = 0, timediff = 0;
   t1 = drift + 32768;
   t2 = drift_pre + 32768.;
-  if (t1 > t2) {timediff = t1 - t2;}
-  if (t2 > t1) {timediff = t1 + (32768.*2) - t2;}
-  if ((timediff > 0. && timediff < 625.)) {ISGOODtime = false;} // 625 -> 5 microseconds
+  if (t1 > t2) { timediff = t1 - t2; }
+  if (t2 > t1) { timediff = t1 + (32768.*2) - t2; }
+  if ((timediff > 0. && timediff < 625.)) { ISGOODtime = false; } // 625 -> 5 microseconds
   return ISGOODtime;
 }
 
-void SpectrumAnalyser::sddHitMap(int sddnumber, int busnumber,
-                                    int &column, int &row) 
+void SpectrumAnalyser::sddHitMap(
+    int sddnumber, int busnumber, int &column, int &row) 
 {
   row = 0; column = 0;
   int SFERA = 0;
 
   // Back side view
-  if (sddnumber <= 16) {sddnumber = sddnumber; SFERA = 0;}
-  if (sddnumber >= 17 && sddnumber <= 32) {sddnumber = sddnumber - 16; SFERA = 2;}
-  if (sddnumber >= 33 && sddnumber <= 48) {sddnumber = sddnumber - (16*2); SFERA = 4;}
-  if (sddnumber >= 49 && sddnumber <= 64) {sddnumber = sddnumber - (16*3); SFERA = 6;}
+  if (sddnumber <= 16) { sddnumber = sddnumber; SFERA = 0; }
+  if (sddnumber >= 17 && sddnumber <= 32) { sddnumber = sddnumber - 16; SFERA = 2; }
+  if (sddnumber >= 33 && sddnumber <= 48) { sddnumber = sddnumber - (16*2); SFERA = 4; }
+  if (sddnumber >= 49 && sddnumber <= 64) { sddnumber = sddnumber - (16*3); SFERA = 6; }
 
-  if (sddnumber == 1)   {row = 4; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 2)   {row = 3; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 3)   {row = 2; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 4)   {row = 1; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 5)   {row = 1; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 6)   {row = 2; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 7)   {row = 3; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 8)   {row = 4; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 9)   {row = 8; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 10)  {row = 7; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 11)  {row = 6; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 12)  {row = 5; column = 1 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 13)  {row = 5; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 14)  {row = 6; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 15)  {row = 7; column = 2 + SFERA + ((busnumber - 1)*8);}
-  if (sddnumber == 16)  {row = 8; column = 2 + SFERA + ((busnumber - 1)*8);}
+  if (sddnumber == 1)   { row = 4; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 2)   { row = 3; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 3)   { row = 2; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 4)   { row = 1; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 5)   { row = 1; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 6)   { row = 2; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 7)   { row = 3; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 8)   { row = 4; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 9)   { row = 8; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 10)  { row = 7; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 11)  { row = 6; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 12)  { row = 5; column = 1 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 13)  { row = 5; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 14)  { row = 6; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 15)  { row = 7; column = 2 + SFERA + ((busnumber - 1)*8); }
+  if (sddnumber == 16)  { row = 8; column = 2 + SFERA + ((busnumber - 1)*8); }
 }
 
 int SpectrumAnalyser::SFERAnumber(int sdd) 
 {
   int SFERA = 0;
-  if (sdd <= 16) {SFERA = 1;}
-  if (sdd >= 17 && sdd <= 32) {SFERA = 2;}
-  if (sdd >= 33 && sdd <= 48) {SFERA = 3;}
-  if (sdd >= 49 && sdd <= 64) {SFERA = 4;}
+  if (sdd <= 16) { SFERA = 1; }
+  if (sdd >= 17 && sdd <= 32) { SFERA = 2; }
+  if (sdd >= 33 && sdd <= 48) { SFERA = 3; }
+  if (sdd >= 49 && sdd <= 64) { SFERA = 4; }
   return SFERA;
 }
