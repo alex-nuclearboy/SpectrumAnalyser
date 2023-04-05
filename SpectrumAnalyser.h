@@ -4,11 +4,15 @@
 // from TTree ft10/SIDDHARTA-2 TTree
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
-// Modified Fri Mar 31 2023 by Aleksander Khreptak
+// Modified on Fri Mar 31 2023 by Aleksander Khreptak
+// Last updated on Wed Apr 05 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
 #define SPECTRUM_ANALYSER_H
+
+#include <iostream>
+#include <map>
 
 #include <TROOT.h>
 #include <TChain.h>
@@ -24,28 +28,28 @@ public :
   Int_t           fCurrent;   // current Tree number in a TChain
 
   // Fixed size dimensions of arrays
-  static const Int_t MAXHITS  = 40000;
-  static const Int_t MAXEDGES = 280;
+  static const Int_t kMaxHits  = 40000;
+  static const Int_t kMaxEdges = 280;
 
   // Declaration of leaf types
   Int_t           buf;
   Short_t         kt[4];
   Int_t           nhits;
-  Int_t           bus[MAXHITS];     //[nhits]
-  UShort_t        evnr[MAXHITS];    //[nhits]
-  UShort_t        ht[MAXHITS];      //[nhits]
-  UShort_t        trigg[MAXHITS];   //[nhits]
-  UShort_t        sdd[MAXHITS];     //[nhits]
-  Short_t         adc[MAXHITS];     //[nhits]
-  Short_t         drift[MAXHITS];   //[nhits]
+  Int_t           bus[kMaxHits];     //[nhits]
+  UShort_t        evnr[kMaxHits];    //[nhits]
+  UShort_t        ht[kMaxHits];      //[nhits]
+  UShort_t        trigg[kMaxHits];   //[nhits]
+  UShort_t        sdd[kMaxHits];     //[nhits]
+  Short_t         adc[kMaxHits];     //[nhits]
+  Short_t         drift[kMaxHits];   //[nhits]
   Int_t           date;
   Short_t         ie;
   Short_t         ip;
   Short_t         dum;
   Int_t           edges_veto;
-  UShort_t        v_edge[MAXEDGES]; //[edges_veto]
-  UShort_t        v_val[MAXEDGES];  //[edges_veto]
-  UShort_t        v_ch[MAXEDGES];   //[edges_veto]
+  UShort_t        v_edge[kMaxEdges]; //[edges_veto]
+  UShort_t        v_val[kMaxEdges];  //[edges_veto]
+  UShort_t        v_ch[kMaxEdges];   //[edges_veto]
   Int_t           v_found;
   UShort_t        v_ch_r[100];      //[v_found]
   Int_t           v_tdc[100];       //[v_found]
@@ -75,15 +79,17 @@ public :
   TBranch        *b_v_tdc;
   TBranch        *b_v_tot;
 
+  const double PI = 3.14159265358979323846;
+
   UInt_t runtime = 0;
 
-  static const int NUM_BUSES  = 6;    // Number of buses
-  static const int NUM_SDDS   = 64;   // Number of SDDs
+  static const int kNumBuses  = 6;    // Number of buses
+  static const int kNumSDDs   = 64;   // Number of SDDs
   
   // Binning for the ADC
   int num_adc_bins = 10000;
-  const int MIN_ADC = 0;
-  const int MAX_ADC = 10000;
+  const int kMinADC = 0;
+  const int kMaxADC = 10000;
 
   enum class CanvasFormat { Default, A4, A5 };
   enum class CanvasOrientation { Default, Landscape, Portrait };
@@ -98,28 +104,53 @@ public :
   virtual Bool_t   Notify();
   virtual void     Show(Long64_t entry = -1);
 
-  void             initHistograms(int rebin_factor = 1);
-  void             writeHistograms(const std::string& filename);
-  void             drawADCSpectra(const std::string& filename);
-  void             drawSDDMap(const std::string& filename);
+  void             InitHistograms(int rebin_factor = 1);
+  void             WriteHistograms(const std::string& filename);
+  void             DrawADCSpectra(const std::string& filename);
+  void             DrawSDDMap(const std::string& filename);
     
 private:
   // Histograms
-  TH1D *h_adc[NUM_BUSES][NUM_SDDS], *h_adc_raw[NUM_BUSES][NUM_SDDS];
-  TH1D *h_xtalk[NUM_BUSES][NUM_SDDS];
+  TH1D *h_adc[kNumBuses][kNumSDDs], *h_adc_raw[kNumBuses][kNumSDDs];
+  TH1D *h_xtalk[kNumBuses][kNumSDDs];
   TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
-  
-  std::string convertTime(time_t t);
-  bool        crossTalkTiming(Short_t drift, Short_t drift_pre);
-  void        sddHitMap(int sddnumber, int busnumber, int &column, int &row);
+
+  static std::map<std::string, double> xray_line_energies;
+
+  const std::vector<double> triad_peak_energies = {xray_line_energies["TiKa"],
+                                                   xray_line_energies["CuKa"],
+                                                   xray_line_energies["CuKb"]};
+  const std::vector<std::string> triad_peak_names = {"TiKa", "CuKa", "CuKb"};
+
+  std::vector<double> peak_energies;
+  std::vector<std::string> peak_names;
+  int num_peaks = 0;
+
+  std::pair<std::vector<std::string>, std::vector<double>>
+    AddLines(const std::vector<std::string>& lines);
+
+  const int kMaxPeaks = 20;
+
+  const int kMaxNumPeaksPF  = 15; // Maximum number of peaks that the Peak Finder can detect
+  const int kNumPeaksPF     = triad_peak_energies.size();  // Desired number of peaks to find
+  float init_threshold = 0.01;  // Initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
+  float init_tolerance = 0.05;  // Tolerance to check that the peak assumption is correct (5%) 
+
+  std::string ConvertTime(time_t t);
+  bool        CrossTalkTiming(Short_t drift, Short_t drift_pre);
+  void        SDDHitMap(int sddnumber, int busnumber, int &column, int &row);
   int         SFERAnumber(int sdd);
-  TStyle*     setHistogramStyle();
-  TCanvas*    createCanvas(
+  TStyle*     SetHistogramStyle();
+  TCanvas*    CreateCanvas(
                   CanvasFormat format = CanvasFormat::Default,
                   CanvasOrientation orientation = CanvasOrientation::Default,
                   int width = 800, int height = 600);
-  void        drawSpectrum(TCanvas* canvas);
-  void        draw2DHistogram(TH2D* hist, const std::string& title);
+  void        DrawSpectrum(TCanvas* canvas);
+  void        Draw2DHistogram(TH2D* hist, const std::string& title);
+
+  void        SetPreCalibFitFunction(std::string& fitFunc, int n_peaks);
+  void        FindADCPeaks(
+                  const float x_min, const float x_max, const int factor);
   
 };
 
@@ -233,5 +264,79 @@ Int_t SpectrumAnalyser::Cut(Long64_t entry)
 // returns  1 if entry is accepted.
 // returns -1 otherwise.
   return 1;
+}
+
+std::map<std::string, double> SpectrumAnalyser::xray_line_energies = 
+{
+  {"TiKa",  4508.83},
+  {"TiKb",  4931.81},
+  {"CuKa",  8041.05},
+  {"CuKb",  8905.29},
+  {"MnKa",  5895.23},
+  {"FeKa",  6399.47},
+  {"FeKb",  7058.0},
+  {"WKa",   8631.10},
+  {"WKg",   11285.9},
+  {"BrKa",  11908.26},
+  {"BrKb",  13292.0},
+  {"BiKa",  10828.1},
+  {"BiKb",  13011.6},
+  {"BiKg",  15247.7},
+  {"SrKa",  14142.04},
+  {"SrKb",  15836.0},
+  {"PbKa",  10541.39},
+  {"PbKb",  12616.14},
+  {"PbKg",  14764.4}
+};
+
+std::pair<std::vector<std::string>, std::vector<double>> SpectrumAnalyser::
+    AddLines(const std::vector<std::string>& lines)
+{
+  std::vector<double> add_peak_energies = triad_peak_energies;
+  std::vector<std::string> add_peak_names = triad_peak_names;
+
+  // Add lines to names and energies vectors
+  for (const auto& line : lines) {
+    const auto& iter = xray_line_energies.find(line);
+    if (iter != xray_line_energies.end()) {
+      // If the line exists in the energies map,
+      // add it to peak names and peak energies vectors
+      add_peak_names.push_back(line);
+      add_peak_energies.push_back(iter->second);
+    } else {
+      // If the line does not exist in the energies map, print an error message
+      std::cerr << "ERROR: Line \"" << line
+                << "\" does not exist in energies map!" << std::endl;
+      return std::make_pair(std::vector<std::string>(), std::vector<double>());
+    }
+  }
+
+  // Sort the lines by energy
+  std::vector<std::pair<double, std::string>> sorted_lines;
+  for (std::size_t i = 0; i < add_peak_energies.size(); ++i) {
+    sorted_lines.emplace_back(add_peak_energies[i], add_peak_names[i]);
+  }
+  std::sort(sorted_lines.begin(), sorted_lines.end());
+
+  // Clear the previous peak data
+  peak_energies.clear();
+  peak_names.clear();
+
+  // Add the sorted lines to the peak data
+  for (const auto& pair : sorted_lines) {
+    peak_energies.push_back(pair.first);
+    peak_names.push_back(pair.second);
+  }
+
+  num_peaks = peak_energies.size();
+
+  // Output the sorted peaks to the terminal
+  std::cout << "Number of lines: " << num_peaks << std::endl;
+  for (Int_t i = 0; i < num_peaks; ++i) {
+    std::cout << "Line#" << i+1 << ": line " << peak_names[i]
+              << "; energy = " << peak_energies[i] << std::endl;
+  }
+
+  return { peak_names, peak_energies };
 }
 #endif  // SPECTRUM_ANALYSER_CXX

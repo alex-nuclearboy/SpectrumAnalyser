@@ -2,7 +2,7 @@
 * File:         SpectrumAnalyser.cxx
 * Author:       Aleksander Khreptak <aleksander.khreptak@lnf.infn.it>
 * Created:      31 Mar 2023
-* Last updated: 04 Apr 2023
+* Last updated: 05 Apr 2023
 *
 * Description:
 * This file implements a SpectrumAnalyser class that is used
@@ -23,6 +23,7 @@
 #include <TPDF.h>
 #include <TCanvas.h>
 #include <TError.h>
+#include <TSpectrum.h>
 
 void SpectrumAnalyser::Loop()
 {
@@ -42,8 +43,8 @@ void SpectrumAnalyser::Loop()
   time_t time_end = static_cast<time_t>(date_leaf->GetValue(0));
   UInt_t time_diff = time_end - time_start;
   runtime += time_diff;
-  std::cout << "Start time: " << convertTime(time_start) << std::endl;
-  std::cout << "End time: " << convertTime(time_end) << std::endl;
+  std::cout << "Start time: " << ConvertTime(time_start) << std::endl;
+  std::cout << "End time: " << ConvertTime(time_end) << std::endl;
   std::cout << "Runtime: " << runtime/3600 << " h, "
             << (runtime%3600)/60 << " m, " << runtime%60 << " s" << std::endl;
   
@@ -72,14 +73,14 @@ void SpectrumAnalyser::Loop()
       h_adc_raw[bus[ihit]-1][sdd[ihit]-1]->Fill(adc[ihit]);
       ISGOODtime = true;
       if (ihit > 0) {
-        ISGOODtime = crossTalkTiming(drift[ihit], drift[ihit-1]);
+        ISGOODtime = CrossTalkTiming(drift[ihit], drift[ihit-1]);
       }
       if (ISGOODtime) {
         h_adc[bus[ihit]-1][sdd[ihit]-1]->Fill(adc[ihit]);
       } else {
         h_xtalk[bus[ihit]-1][sdd[ihit]-1]->Fill(adc[ihit]);
       }
-      sddHitMap(sdd[ihit], bus[ihit], column, row);
+      SDDHitMap(sdd[ihit], bus[ihit], column, row);
       h_sdd_map->SetBinContent(column, row, sdd[ihit]);
       h_sdd_rate->Fill(column, row);
       if (adc[ihit] > 1200) { h_sdd_rate_sig->Fill(column, row); }
@@ -100,9 +101,18 @@ void SpectrumAnalyser::Loop()
       }
     }
   }
+  //// Peak Finder ////
+  std::vector<std::string> lines = {"TiKb"};
+  AddLines(lines);
+  std::string fitFunc = "";
+  SetPreCalibFitFunction(fitFunc,num_peaks);
+  // Output the precalibration fit function
+  std::cout << "Precalibration fit function is: " << fitFunc << std::endl;
+  FindADCPeaks(1700,3700,8);
 }
 
-std::string SpectrumAnalyser::convertTime(time_t t)
+
+std::string SpectrumAnalyser::ConvertTime(time_t t)
 {
     std::stringstream ss;
     tm* timeinfo = localtime(&t);
@@ -115,19 +125,20 @@ std::string SpectrumAnalyser::convertTime(time_t t)
     return ss.str();
 }
 
-void SpectrumAnalyser::initHistograms(int rebin_factor) 
+void SpectrumAnalyser::InitHistograms(int rebin_factor) 
 {
   num_adc_bins /= rebin_factor;   // divide number of bins by rebin factor
+  //factor = rebin_factor;
   
   // Loop over all the buses and SDDs to create the histograms
-  for (int bus_idx = 0; bus_idx < NUM_BUSES; ++bus_idx) {
-    for (int sdd_idx = 0; sdd_idx < NUM_SDDS; ++sdd_idx) {
+  for (int bus_idx = 0; bus_idx < kNumBuses; ++bus_idx) {
+    for (int sdd_idx = 0; sdd_idx < kNumSDDs; ++sdd_idx) {
 
       // ADC histograms
       h_adc[bus_idx][sdd_idx] = new TH1D(
           Form("h_adc_bus%i_sdd%i", bus_idx + 1, sdd_idx + 1),
           Form("h_adc_bus%i_sdd%i", bus_idx + 1, sdd_idx + 1),
-          num_adc_bins, MIN_ADC, MAX_ADC
+          num_adc_bins, kMinADC, kMaxADC
       );
       h_adc[bus_idx][sdd_idx]->GetXaxis()->SetTitle("ADC [channel]");
       h_adc[bus_idx][sdd_idx]->GetYaxis()->SetTitle(
@@ -140,7 +151,7 @@ void SpectrumAnalyser::initHistograms(int rebin_factor)
       h_xtalk[bus_idx][sdd_idx] = new TH1D(
           Form("h_xtalk_bus%i_sdd%i", bus_idx + 1, sdd_idx + 1),
           Form("h_xtalk_bus%i_sdd%i", bus_idx + 1, sdd_idx + 1),
-          num_adc_bins, MIN_ADC, MAX_ADC);
+          num_adc_bins, kMinADC, kMaxADC);
     }
   }
 
@@ -153,14 +164,14 @@ void SpectrumAnalyser::initHistograms(int rebin_factor)
       "h_sdd_rate_noise", "h_sdd_rate_noise", 48, 1, 49, 8, 1, 9);
 }
 
-void SpectrumAnalyser::writeHistograms(const std::string& filename)
+void SpectrumAnalyser::WriteHistograms(const std::string& filename)
 {
   // Create the output file
   TFile* output_file = new TFile(filename.c_str(), "RECREATE");
   output_file->cd();
   // Write the histograms to the file
-  for (int bus_idx = 0; bus_idx < NUM_BUSES; ++bus_idx) {
-    for (int sdd_idx = 0; sdd_idx < NUM_SDDS; ++sdd_idx) {
+  for (int bus_idx = 0; bus_idx < kNumBuses; ++bus_idx) {
+    for (int sdd_idx = 0; sdd_idx < kNumSDDs; ++sdd_idx) {
       if (h_adc[bus_idx][sdd_idx]->GetEntries() > 0) {
         h_adc_raw[bus_idx][sdd_idx]->Write();
         h_adc[bus_idx][sdd_idx]->Write();
@@ -179,7 +190,7 @@ void SpectrumAnalyser::writeHistograms(const std::string& filename)
   std::cout << "Output file: " << filename << std::endl;
 }
 
-TStyle* SpectrumAnalyser::setHistogramStyle()
+TStyle* SpectrumAnalyser::SetHistogramStyle()
 {
   // Global histogram style settings
   static TStyle* style = []{
@@ -206,11 +217,11 @@ TStyle* SpectrumAnalyser::setHistogramStyle()
   return style;
 }
 
-TCanvas* SpectrumAnalyser::createCanvas(
+TCanvas* SpectrumAnalyser::CreateCanvas(
     CanvasFormat format, CanvasOrientation orientation, 
     int width, int height)
 {
-  setHistogramStyle();
+  SetHistogramStyle();
   int canvas_width, canvas_height;
   switch (format) {
   case CanvasFormat::A4:
@@ -234,27 +245,27 @@ TCanvas* SpectrumAnalyser::createCanvas(
   return canvas.release();
 }
 
-void SpectrumAnalyser::drawADCSpectra(const std::string& filename) 
+void SpectrumAnalyser::DrawADCSpectra(const std::string& filename) 
 {   
-  auto canvas = createCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
+  auto canvas = CreateCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
   auto pdf = std::make_unique<TPDF>(
       Form("output/plots/hADC_spectra_%s.pdf", filename.c_str()));
-  drawSpectrum(canvas);
+  DrawSpectrum(canvas);
   pdf->Close();
   canvas->Close();
   std::cout << "ADC spectra have been saved to output/plots/hADC_spectra_" 
             << filename.c_str() << ".pdf" << std::endl;
 }
 
-void SpectrumAnalyser::drawSpectrum(TCanvas* canvas)
+void SpectrumAnalyser::DrawSpectrum(TCanvas* canvas)
 {
   const int NUM_COLUMNS = 2;
   const int NUM_ROWS    = 4;
-  const int X_MIN = 1500;
-  const int X_MAX = 4500;
+  const int kMinX = 1500;
+  const int kMaxX = 4500;
   
-  for (int bus_idx = 0; bus_idx < NUM_BUSES; ++bus_idx) {
-    for (int sdd_idx = 0; sdd_idx < NUM_SDDS; ++sdd_idx) {
+  for (int bus_idx = 0; bus_idx < kNumBuses; ++bus_idx) {
+    for (int sdd_idx = 0; sdd_idx < kNumSDDs; ++sdd_idx) {
       // Clone histograms
       auto hist1 = dynamic_cast<TH1D*>(h_adc_raw[bus_idx][sdd_idx]->Clone());
       auto hist2 = dynamic_cast<TH1D*>(h_adc[bus_idx][sdd_idx]->Clone());
@@ -272,7 +283,7 @@ void SpectrumAnalyser::drawSpectrum(TCanvas* canvas)
       hist1->SetTitle(
           Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", 
                 bus_idx+1, sdd_idx+1));
-      hist1->GetXaxis()->SetRangeUser(X_MIN, X_MAX);
+      hist1->GetXaxis()->SetRangeUser(kMinX, kMaxX);
       hist1->UseCurrentStyle();
       hist1->SetLineColor(kBlue);
       hist2->SetLineColor(kRed);
@@ -285,7 +296,7 @@ void SpectrumAnalyser::drawSpectrum(TCanvas* canvas)
   }
 }
 
-void SpectrumAnalyser::drawSDDMap(const std::string& filename)
+void SpectrumAnalyser::DrawSDDMap(const std::string& filename)
 {
   // Disable "Info in <TCanvas::Print>" message
   gErrorIgnoreLevel = kWarning;
@@ -297,18 +308,18 @@ void SpectrumAnalyser::drawSDDMap(const std::string& filename)
   auto hist4 = dynamic_cast<TH2D*>(h_sdd_rate_noise->Clone());
 
   // Create a canvas and draw histograms
-  static auto canvas = createCanvas(CanvasFormat::A4, 
+  static auto canvas = CreateCanvas(CanvasFormat::A4, 
                                     CanvasOrientation::Landscape);
   canvas->Clear();
   canvas->Divide(2, 2);
   canvas->cd(1);
-  draw2DHistogram(hist1,"SDD positions around the target");
+  Draw2DHistogram(hist1,"SDD positions around the target");
   canvas->cd(2);
-  draw2DHistogram(hist2,"Map of SDD counts around the target");
+  Draw2DHistogram(hist2,"Map of SDD counts around the target");
   canvas->cd(3);
-  draw2DHistogram(hist3,"Map of SDD signal counts around the target");
+  Draw2DHistogram(hist3,"Map of SDD signal counts around the target");
   canvas->cd(4);
-  draw2DHistogram(hist4,"Map of SDD noise counts around the target");
+  Draw2DHistogram(hist4,"Map of SDD noise counts around the target");
 
   // Save canvas as image
   canvas->SaveAs(Form("output/plots/hSDD_map_%s.pdf", filename.c_str()));
@@ -317,7 +328,7 @@ void SpectrumAnalyser::drawSDDMap(const std::string& filename)
             << filename.c_str() << ".pdf" << std::endl;
 }
 
-void SpectrumAnalyser::draw2DHistogram(TH2D* hist, const std::string& title) 
+void SpectrumAnalyser::Draw2DHistogram(TH2D* hist, const std::string& title) 
 {
   hist->SetTitle(title.c_str());
   hist->GetXaxis()->SetTitle("column");
@@ -326,7 +337,179 @@ void SpectrumAnalyser::draw2DHistogram(TH2D* hist, const std::string& title)
   hist->Draw("COLZ");
 }
 
-bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre) 
+void SpectrumAnalyser::SetPreCalibFitFunction(
+    std::string& fitFunc, int n_peaks) 
+{
+  const int kNumGaussParams = 3;  // Number of parameters for the Gaussian function
+  const int kNumBkgParams = 3;  // Number of parameters for the background: p0 + exp(p1 + p2*x)
+
+  int gauss_amp[kMaxNumPeaksPF]   = {-1};   // Gaussian parameters
+  int gauss_mean[kMaxNumPeaksPF]  = {-1};
+  int gauss_sigma[kMaxNumPeaksPF] = {-1};
+  int bkg_p0 = -1;  // Background parameters
+  int bkg_p1 = -1;
+  int bkg_p2 = -1;
+
+  // Set precalibration fit function: Gaussians + background
+  //std::string fitFunc = "";
+  for (int i = 0; i < n_peaks; ++i) {
+    gauss_amp[i] = kNumGaussParams * i;
+    gauss_mean [i]  = kNumGaussParams * i + 1;
+    gauss_sigma [i] = kNumGaussParams * i + 2;
+    if (i != 0) { fitFunc += "+"; }
+    fitFunc += Form("[%i]*exp(-0.5*pow(x-[%i],2)/pow([%i],2))/sqrt(2.*%f)/[%i]",
+                    gauss_amp[i], gauss_mean[i], gauss_sigma[i], PI, gauss_sigma[i]);
+  }
+
+  bkg_p0 = kNumGaussParams * n_peaks;
+  bkg_p1 = kNumGaussParams * n_peaks + 1;
+  bkg_p2 = kNumGaussParams * n_peaks + 2;
+  fitFunc += Form("+exp([%i]+[%i]*x)+[%i]", bkg_p0, bkg_p1, bkg_p2);
+}
+
+void SpectrumAnalyser::FindADCPeaks(
+    const float x_min, const float x_max, const int factor)
+{
+  int sigma_pf = 20;  // sigma for the Peak Finder (in units of ADC channels)
+  sigma_pf /= factor;
+
+  float init_threshold = 0.01; // initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
+  float init_tolerance = 0.05; // tolerance to check that the peak assumption is correct (5%)
+
+  double *x_peaks;
+  double *y_peaks;
+
+  float x_adc[kMaxNumPeaksPF] = {};
+  float y_adc[kMaxNumPeaksPF] = {};
+  float x_min_pre_cal[kMaxPeaks] = {-1.};
+  float x_max_pre_cal[kMaxPeaks] = {-1.};
+
+  for(int bus_idx = 0; bus_idx < kNumBuses; ++bus_idx) {
+    for(int sdd_idx = 0; sdd_idx < kNumSDDs; ++sdd_idx) {
+      if (!h_adc[bus_idx][sdd_idx]) continue;
+      TH1F* histo;
+      histo = (TH1F*)h_adc[bus_idx][sdd_idx]->Clone("histo");
+      int min_stats = 1000;   // min statistics for calibration
+      if (histo->GetEntries() < min_stats) continue;
+      std::cout << std::endl << "--- PEAK FINDER: BUS#" 
+                << bus_idx + 1 << " SDD#" 
+                << sdd_idx + 1<< ". Statistics: " 
+                << histo->GetEntries() << " ---" << std::endl << std::endl;
+      histo->SetAxisRange(x_min,x_max,"X");
+
+      // Use TSpectrum to find the peak candidates
+      int num_found = 0;
+      float peak_threshold = init_threshold;
+      int num_tries = 0;
+      TSpectrum *spectrum = new TSpectrum(kMaxNumPeaksPF);
+      while(num_found < kNumPeaksPF && kNumPeaksPF < 15) {
+        num_found = spectrum->Search(histo,sigma_pf,"",peak_threshold);
+        std::cout << "Found " << num_found << " candidate peaks:" << std::endl;
+        peak_threshold *= 0.1;  // Initial = 0.01. It changes until it finds peaks
+        num_tries++;
+      }
+      if (num_tries >= 15) {
+        std::cout << "PEAK FINDER DOES NOT WORK, ==> CONTINUE" << std::endl;
+        continue;
+      }
+
+      x_peaks = spectrum->GetPositionX(); // array with x-positions of the centroids found by TSpectrum
+      y_peaks = spectrum->GetPositionY(); // array with y-positions of the centroids found by TSpectrum
+
+      // Reorder in ADC counts and check compatibility with the maximum peaks assumption
+      float the_min = 999999.;
+      int i_min = 0;
+      for (int i = 0; i < num_found; ++i) {   // find the smallest, write it in x_adc and remove it:
+        the_min = 999999.;
+        for (int j = 0; j < num_found; ++j) {
+          if (x_peaks[j] < the_min) {
+            the_min = x_peaks[j];
+            i_min = j;
+          }
+        }
+        x_adc[i] = x_peaks[i_min];
+        y_adc[i] = y_peaks[i_min];
+        x_peaks[i_min] = 999999.;
+      }
+      // print them, now ordered:
+      for (int i = 0; i < num_found; ++i) {
+        std::cout << "Peak#" << i + 1 << ". Position [ADC]: " << x_adc[i] 
+                  << ". Intensity: " << y_adc[i] << std::endl;
+      }
+
+      // Check if the peaks found are compatible with the assumption:
+      float energy_diff_1_0 = triad_peak_energies[1] 
+                            - triad_peak_energies[0];
+      float energy_diff_2_1 = triad_peak_energies[2] 
+                            - triad_peak_energies[1];
+      float energy_relation = energy_diff_2_1 / energy_diff_1_0;
+      // Make a triad from all the peaks found:
+      float g_pf  = 0.0;  //gain
+      float g0_pf = 0.0;  //offset
+      bool is_passed = false;
+      int i_peak0 = -1;
+      int i_peak1 = -1;
+      int i_peak2 = -1;
+
+      for (int i0 = 0; i0 < num_found; i0++) {
+        for (int i1 = i0 + 1; i1 < num_found; i1++) {
+          for(int i2 = i1 + 1; i2 < num_found; i2++) {
+            std::cout << std::endl << "-> Trying the triad: " 
+                      << i0 << " " << i1 << " " << i2 << std::endl;
+            float adc_diff_1_0 = x_adc[i1] - x_adc[i0];
+            float adc_diff_2_1 = x_adc[i2] - x_adc[i1];
+            float adc_relation = adc_diff_2_1 / adc_diff_1_0;
+            std::cout << "Checking assumption: Energy relation " 
+                      << energy_relation << " vs ADC relation " 
+                      << adc_relation << std::endl;
+            //Define tolerance parameter
+            float peak_tolerance = init_tolerance;  // 5%
+            bool tolerance_pass = true;
+            if (abs(1.-(energy_relation / adc_relation)) > peak_tolerance) {
+              tolerance_pass = false;
+            }
+
+            // Get the Peak Finder calibration offset g0 and slope g
+            float adc_diff = x_adc[i0] - x_adc[i1];
+            float energy_diff = triad_peak_energies[0] - triad_peak_energies[1];
+            g_pf  = energy_diff / adc_diff;
+            g0_pf = -1.*x_adc[i0]*g_pf + triad_peak_energies[0];
+            std::cout << "Offset = " << g0_pf << ". Gain = " << g_pf << std::endl;
+
+            //define an acceptable gain and offset; check if conditions (tolerance, G and G0) are met
+            float min_g = 2.9;  float max_g = 3.9;
+            float min_g0 = -3000;   float max_g0 = -1000;
+            if (g_pf < max_g && g_pf > min_g && g0_pf < max_g0
+                && g0_pf > min_g0 && tolerance_pass) {
+              std::cout << " -- TEST PASSED! --" << std::endl;
+              is_passed = true;
+              i_peak0 = i0;
+              i_peak1 = i1;
+              i_peak2 = i2;
+            }
+            if (is_passed) break;
+          }
+          if (is_passed) break;
+        }
+        if (is_passed) break;
+      }
+
+      // Find also the highest height among the selected ones
+      float highest_peak = 0.0;
+      if (i_peak0 > -1) {
+        if (y_adc[i_peak0] > highest_peak) highest_peak = y_adc[i_peak0];
+        if (y_adc[i_peak1] > highest_peak) highest_peak = y_adc[i_peak1];
+        if (y_adc[i_peak2] > highest_peak) highest_peak = y_adc[i_peak2];
+      }
+
+      histo->Delete();
+
+    }
+  }
+
+}
+
+bool SpectrumAnalyser::CrossTalkTiming(Short_t drift, Short_t drift_pre) 
 {
   bool ISGOODtime = true;
   int t1 = 0, t2 = 0, timediff = 0;
@@ -338,7 +521,7 @@ bool SpectrumAnalyser::crossTalkTiming(Short_t drift, Short_t drift_pre)
   return ISGOODtime;
 }
 
-void SpectrumAnalyser::sddHitMap(
+void SpectrumAnalyser::SDDHitMap(
     int sddnumber, int busnumber, int &column, int &row) 
 {
   row = 0; column = 0;
