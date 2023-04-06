@@ -5,7 +5,7 @@
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
 // Modified on Fri Mar 31 2023 by Aleksander Khreptak
-// Last updated on Wed Apr 05 2023
+// Last updated on Wed Apr 06 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -19,6 +19,7 @@
 #include <TFile.h>
 #include <TH1D.h>
 #include <TH2D.h>
+#include <TSpectrum.h>
 
 // Header file for the class stored in the TTree
 
@@ -148,10 +149,26 @@ private:
   void        DrawSpectrum(TCanvas* canvas);
   void        Draw2DHistogram(TH2D* hist, const std::string& title);
 
-  void        SetPreCalibFitFunction(TString& fit_func, int n_peaks);
+  void        SetPreCalibFitFunction(
+                  TString& fit_func, int n_peaks, const int kNumGaussParams,
+                  const int kNumBkgParams, int* gauss_amp,
+                  int* gauss_mean, int* gauss_sigma,
+                  int bkg_p0, int bkg_p1, int bkg_p2);
   void        FindADCPeaks(
                   const float& x_min, const float& x_max, const int& factor);
-  
+  void        FindPeakCandidates(
+                  TH1D* histo, const int sigma_pf, 
+                  std::vector<std::pair<float, float>>& peak_pos,
+                  TSpectrum& spectrum, const float init_threshold);
+  void        GetCalibrationParameters(
+                  const std::vector<std::pair<float, float>>& peak_pos,
+                  const int& num_found, const float& energy_ratio,
+                  float& slope, float& offset, float& highest_peak);
+  void        FitSpectrum(
+                  TH1D* histo, const std::vector<double> peak_energies,
+                  const float slope, const float offset, const int num_peaks,
+                  const float highest_peak, const int bus_idx, const int sdd_idx,
+                  const std::string& filename);
 };
 
 #endif  // SPECTRUM_ANALYSER_H
