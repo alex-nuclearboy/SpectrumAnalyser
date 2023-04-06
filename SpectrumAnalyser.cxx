@@ -16,6 +16,9 @@
 #include <iomanip>
 #include <ctime>
 #include <sstream>
+#include <algorithm> // for std::sort
+#include <vector>
+#include <utility> // for std::pair
 
 #include <TBranch.h>
 #include <TLeaf.h>
@@ -104,10 +107,10 @@ void SpectrumAnalyser::Loop()
   //// Peak Finder ////
   std::vector<std::string> lines = {"TiKb"};
   AddLines(lines);
-  std::string fitFunc = "";
-  SetPreCalibFitFunction(fitFunc,num_peaks);
+  TString fit_function = "";
+  SetPreCalibFitFunction(fit_function,num_peaks);
   // Output the precalibration fit function
-  std::cout << "Precalibration fit function is: " << fitFunc << std::endl;
+  std::cout << "Precalibration fit function is: " << fit_function << std::endl;
   FindADCPeaks(1700,3700,8);
 }
 
@@ -338,10 +341,10 @@ void SpectrumAnalyser::Draw2DHistogram(TH2D* hist, const std::string& title)
 }
 
 void SpectrumAnalyser::SetPreCalibFitFunction(
-    std::string& fitFunc, int n_peaks) 
+    TString& fit_func, int n_peaks) 
 {
   const int kNumGaussParams = 3;  // Number of parameters for the Gaussian function
-  const int kNumBkgParams = 3;  // Number of parameters for the background: p0 + exp(p1 + p2*x)
+  const int kNumBkgParams   = 3;  // Number of parameters for the background: p0 + exp(p1 + p2*x)
 
   int gauss_amp[kMaxNumPeaksPF]   = {-1};   // Gaussian parameters
   int gauss_mean[kMaxNumPeaksPF]  = {-1};
@@ -351,162 +354,159 @@ void SpectrumAnalyser::SetPreCalibFitFunction(
   int bkg_p2 = -1;
 
   // Set precalibration fit function: Gaussians + background
-  //std::string fitFunc = "";
+  fit_func.Clear();
   for (int i = 0; i < n_peaks; ++i) {
     gauss_amp[i] = kNumGaussParams * i;
     gauss_mean [i]  = kNumGaussParams * i + 1;
     gauss_sigma [i] = kNumGaussParams * i + 2;
-    if (i != 0) { fitFunc += "+"; }
-    fitFunc += Form("[%i]*exp(-0.5*pow(x-[%i],2)/pow([%i],2))/sqrt(2.*%f)/[%i]",
-                    gauss_amp[i], gauss_mean[i], gauss_sigma[i], PI, gauss_sigma[i]);
+    if (i != 0) { fit_func += "+"; }
+    fit_func += TString::Format(
+        "[%d]*exp(-0.5*pow(x-[%d],2)/pow([%d],2))/sqrt(2.0*%f)/[%d]",
+        gauss_amp[i], gauss_mean[i], gauss_sigma[i], PI, gauss_sigma[i]);
   }
 
   bkg_p0 = kNumGaussParams * n_peaks;
   bkg_p1 = kNumGaussParams * n_peaks + 1;
   bkg_p2 = kNumGaussParams * n_peaks + 2;
-  fitFunc += Form("+exp([%i]+[%i]*x)+[%i]", bkg_p0, bkg_p1, bkg_p2);
+  fit_func += TString::Format("+exp([%d]+[%d]*x)+[%d]", 
+                            bkg_p0, bkg_p1, bkg_p2);
 }
 
 void SpectrumAnalyser::FindADCPeaks(
-    const float x_min, const float x_max, const int factor)
+    const float& x_min, const float& x_max, const int& factor)
 {
-  int sigma_pf = 20;  // sigma for the Peak Finder (in units of ADC channels)
-  sigma_pf /= factor;
+  const float energy_ratio = (triad_peak_energies[2] - triad_peak_energies[1]) /
+                             (triad_peak_energies[1] - triad_peak_energies[0]);
 
   float init_threshold = 0.01; // initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
   float init_tolerance = 0.05; // tolerance to check that the peak assumption is correct (5%)
+  
+  const int sigma_pf = 20 / factor;  // sigma for the Peak Finder (in units of ADC channels)
 
-  double *x_peaks;
-  double *y_peaks;
+  const int kMinStats = 1000;
 
-  float x_adc[kMaxNumPeaksPF] = {};
-  float y_adc[kMaxNumPeaksPF] = {};
-  float x_min_pre_cal[kMaxPeaks] = {-1.};
-  float x_max_pre_cal[kMaxPeaks] = {-1.};
+  TSpectrum spectrum{kMaxNumPeaksPF};
 
   for(int bus_idx = 0; bus_idx < kNumBuses; ++bus_idx) {
     for(int sdd_idx = 0; sdd_idx < kNumSDDs; ++sdd_idx) {
       if (!h_adc[bus_idx][sdd_idx]) continue;
-      TH1F* histo;
-      histo = (TH1F*)h_adc[bus_idx][sdd_idx]->Clone("histo");
-      int min_stats = 1000;   // min statistics for calibration
-      if (histo->GetEntries() < min_stats) continue;
+
+      auto histo = static_cast<TH1F*>(h_adc[bus_idx][sdd_idx]->Clone("histo"));
+      if (histo->GetEntries() < kMinStats) continue;
+
+      std::vector<std::pair<float, float>> peak_pos;
+
       std::cout << std::endl << "--- PEAK FINDER: BUS#" 
                 << bus_idx + 1 << " SDD#" 
                 << sdd_idx + 1<< ". Statistics: " 
                 << histo->GetEntries() << " ---" << std::endl << std::endl;
-      histo->SetAxisRange(x_min,x_max,"X");
 
-      // Use TSpectrum to find the peak candidates
+      histo->GetXaxis()->SetRangeUser(x_min, x_max);
+
       int num_found = 0;
-      float peak_threshold = init_threshold;
       int num_tries = 0;
-      TSpectrum *spectrum = new TSpectrum(kMaxNumPeaksPF);
-      while(num_found < kNumPeaksPF && kNumPeaksPF < 15) {
-        num_found = spectrum->Search(histo,sigma_pf,"",peak_threshold);
-        std::cout << "Found " << num_found << " candidate peaks:" << std::endl;
+      float peak_threshold = init_threshold;
+
+      // Use TSpectrum to find the peak candidates      
+      while(num_found < kNumPeaksPF && num_tries < 10) {
+        num_found = spectrum.Search(histo, sigma_pf, "", peak_threshold);        
         peak_threshold *= 0.1;  // Initial = 0.01. It changes until it finds peaks
         num_tries++;
       }
-      if (num_tries >= 15) {
-        std::cout << "PEAK FINDER DOES NOT WORK, ==> CONTINUE" << std::endl;
+
+      std::cout << "Found " << num_found << " candidate peaks:" << std::endl;
+
+      if (num_found == 0) {
+        std::cout << "PEAK FINDER COULD NOT FIND ANY PEAKS. CONTINUING..." 
+                  << std::endl;
+        continue;
+      }
+      if (num_tries >= 10) {
+        std::cout << "PEAK FINDER DOES NOT WORK. CONTINUING..." << std::endl;
         continue;
       }
 
-      x_peaks = spectrum->GetPositionX(); // array with x-positions of the centroids found by TSpectrum
-      y_peaks = spectrum->GetPositionY(); // array with y-positions of the centroids found by TSpectrum
-
-      // Reorder in ADC counts and check compatibility with the maximum peaks assumption
-      float the_min = 999999.;
-      int i_min = 0;
-      for (int i = 0; i < num_found; ++i) {   // find the smallest, write it in x_adc and remove it:
-        the_min = 999999.;
-        for (int j = 0; j < num_found; ++j) {
-          if (x_peaks[j] < the_min) {
-            the_min = x_peaks[j];
-            i_min = j;
-          }
-        }
-        x_adc[i] = x_peaks[i_min];
-        y_adc[i] = y_peaks[i_min];
-        x_peaks[i_min] = 999999.;
-      }
-      // print them, now ordered:
       for (int i = 0; i < num_found; ++i) {
-        std::cout << "Peak#" << i + 1 << ". Position [ADC]: " << x_adc[i] 
-                  << ". Intensity: " << y_adc[i] << std::endl;
+        peak_pos.emplace_back(
+            spectrum.GetPositionX()[i], spectrum.GetPositionY()[i]);
       }
 
-      // Check if the peaks found are compatible with the assumption:
-      float energy_diff_1_0 = triad_peak_energies[1] 
-                            - triad_peak_energies[0];
-      float energy_diff_2_1 = triad_peak_energies[2] 
-                            - triad_peak_energies[1];
-      float energy_relation = energy_diff_2_1 / energy_diff_1_0;
-      // Make a triad from all the peaks found:
-      float g_pf  = 0.0;  //gain
-      float g0_pf = 0.0;  //offset
-      bool is_passed = false;
-      int i_peak0 = -1;
-      int i_peak1 = -1;
-      int i_peak2 = -1;
+      // Sort the peaks based on their x positions
+      std::sort(peak_pos.begin(), peak_pos.end(),
+          [](const auto& a, const auto& b) { return a.first < b.first; });
 
+      // Print found peaks
+      for (int i = 0; i < num_found; ++i) {
+        std::cout << "Peak#" << i + 1 << ". Position [ADC]: "
+                  << peak_pos[i].first << ". Intensity: "
+                  << peak_pos[i].second << std::endl;
+      }
+      
+      // Check if the peaks found are compatible with the assumption
+      float slope  = 0.0;
+      float offset = 0.0;
+
+      // Make a triad from all the peaks found:
+      int peak_idx[3];
+      
       for (int i0 = 0; i0 < num_found; i0++) {
         for (int i1 = i0 + 1; i1 < num_found; i1++) {
           for(int i2 = i1 + 1; i2 < num_found; i2++) {
             std::cout << std::endl << "-> Trying the triad: " 
                       << i0 << " " << i1 << " " << i2 << std::endl;
-            float adc_diff_1_0 = x_adc[i1] - x_adc[i0];
-            float adc_diff_2_1 = x_adc[i2] - x_adc[i1];
-            float adc_relation = adc_diff_2_1 / adc_diff_1_0;
+            float adc_ratio = (peak_pos[i2].first - peak_pos[i1].first) / 
+                              (peak_pos[i1].first - peak_pos[i0].first);
+
             std::cout << "Checking assumption: Energy relation " 
-                      << energy_relation << " vs ADC relation " 
-                      << adc_relation << std::endl;
-            //Define tolerance parameter
+                      << energy_ratio << " vs ADC relation " 
+                      << adc_ratio << std::endl;
+
             float peak_tolerance = init_tolerance;  // 5%
             bool tolerance_pass = true;
-            if (abs(1.-(energy_relation / adc_relation)) > peak_tolerance) {
+            if (abs(1.0 - (energy_ratio / adc_ratio)) > peak_tolerance) {
               tolerance_pass = false;
             }
 
-            // Get the Peak Finder calibration offset g0 and slope g
-            float adc_diff = x_adc[i0] - x_adc[i1];
+            // Get the Peak Finder calibration offset and slope
+            float adc_diff = peak_pos[i0].first - peak_pos[i1].first;
             float energy_diff = triad_peak_energies[0] - triad_peak_energies[1];
-            g_pf  = energy_diff / adc_diff;
-            g0_pf = -1.*x_adc[i0]*g_pf + triad_peak_energies[0];
-            std::cout << "Offset = " << g0_pf << ". Gain = " << g_pf << std::endl;
+            slope  = energy_diff / adc_diff;
+            offset = -1.0 * peak_pos[i0].first * slope + triad_peak_energies[0];
+
+            std::cout << "Offset = " << offset 
+                      << ". Slope = " << slope << std::endl;
 
             //define an acceptable gain and offset; check if conditions (tolerance, G and G0) are met
-            float min_g = 2.9;  float max_g = 3.9;
-            float min_g0 = -3000;   float max_g0 = -1000;
-            if (g_pf < max_g && g_pf > min_g && g0_pf < max_g0
-                && g0_pf > min_g0 && tolerance_pass) {
-              std::cout << " -- TEST PASSED! --" << std::endl;
-              is_passed = true;
-              i_peak0 = i0;
-              i_peak1 = i1;
-              i_peak2 = i2;
+            float min_slope = 2.9;  float max_slope = 3.9;
+            float min_offset = -3000;   float max_offset = -1000;
+            if ((slope < max_slope) && (slope > min_slope) && 
+                (offset < max_offset) && (offset > min_offset) && 
+                tolerance_pass) {
+              std::cout << " -- TEST PASSED! --" << std::endl;              
+              peak_idx[0] = i0;
+              peak_idx[1] = i1;
+              peak_idx[2] = i2;
             }
-            if (is_passed) break;
           }
-          if (is_passed) break;
         }
-        if (is_passed) break;
       }
 
       // Find also the highest height among the selected ones
       float highest_peak = 0.0;
-      if (i_peak0 > -1) {
-        if (y_adc[i_peak0] > highest_peak) highest_peak = y_adc[i_peak0];
-        if (y_adc[i_peak1] > highest_peak) highest_peak = y_adc[i_peak1];
-        if (y_adc[i_peak2] > highest_peak) highest_peak = y_adc[i_peak2];
+      if (peak_idx[0] > -1) {
+        if (peak_pos[peak_idx[0]].second > highest_peak) 
+          highest_peak = peak_pos[peak_idx[0]].second;
+        if (peak_pos[peak_idx[1]].second > highest_peak) 
+          highest_peak = peak_pos[peak_idx[1]].second;
+        if (peak_pos[peak_idx[2]].second > highest_peak) 
+          highest_peak = peak_pos[peak_idx[2]].second;
       }
-
+      
+      std::cout << "The highest peak is " << highest_peak << std::endl;
+      
       histo->Delete();
-
     }
   }
-
 }
 
 bool SpectrumAnalyser::CrossTalkTiming(Short_t drift, Short_t drift_pre) 

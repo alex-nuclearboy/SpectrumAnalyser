@@ -148,9 +148,9 @@ private:
   void        DrawSpectrum(TCanvas* canvas);
   void        Draw2DHistogram(TH2D* hist, const std::string& title);
 
-  void        SetPreCalibFitFunction(std::string& fitFunc, int n_peaks);
+  void        SetPreCalibFitFunction(TString& fit_func, int n_peaks);
   void        FindADCPeaks(
-                  const float x_min, const float x_max, const int factor);
+                  const float& x_min, const float& x_max, const int& factor);
   
 };
 
