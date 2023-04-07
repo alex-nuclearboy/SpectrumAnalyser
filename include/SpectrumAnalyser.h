@@ -5,7 +5,7 @@
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
 // Modified on Fri Mar 31 2023 by Aleksander Khreptak
-// Last updated on Wed Apr 06 2023
+// Last updated on Fri Apr 7 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -29,28 +29,28 @@ public :
   Int_t           fCurrent;   // current Tree number in a TChain
 
   // Fixed size dimensions of arrays
-  static const Int_t kMaxHits  = 40000;
-  static const Int_t kMaxEdges = 280;
+  static const Int_t MAX_HITS  = 40000;
+  static const Int_t MAX_EDGES = 280;
 
   // Declaration of leaf types
   Int_t           buf;
   Short_t         kt[4];
   Int_t           nhits;
-  Int_t           bus[kMaxHits];     //[nhits]
-  UShort_t        evnr[kMaxHits];    //[nhits]
-  UShort_t        ht[kMaxHits];      //[nhits]
-  UShort_t        trigg[kMaxHits];   //[nhits]
-  UShort_t        sdd[kMaxHits];     //[nhits]
-  Short_t         adc[kMaxHits];     //[nhits]
-  Short_t         drift[kMaxHits];   //[nhits]
+  Int_t           bus[MAX_HITS];     //[nhits]
+  UShort_t        evnr[MAX_HITS];    //[nhits]
+  UShort_t        ht[MAX_HITS];      //[nhits]
+  UShort_t        trigg[MAX_HITS];   //[nhits]
+  UShort_t        sdd[MAX_HITS];     //[nhits]
+  Short_t         adc[MAX_HITS];     //[nhits]
+  Short_t         drift[MAX_HITS];   //[nhits]
   Int_t           date;
   Short_t         ie;
   Short_t         ip;
   Short_t         dum;
   Int_t           edges_veto;
-  UShort_t        v_edge[kMaxEdges]; //[edges_veto]
-  UShort_t        v_val[kMaxEdges];  //[edges_veto]
-  UShort_t        v_ch[kMaxEdges];   //[edges_veto]
+  UShort_t        v_edge[MAX_EDGES]; //[edges_veto]
+  UShort_t        v_val[MAX_EDGES];  //[edges_veto]
+  UShort_t        v_ch[MAX_EDGES];   //[edges_veto]
   Int_t           v_found;
   UShort_t        v_ch_r[100];      //[v_found]
   Int_t           v_tdc[100];       //[v_found]
@@ -84,13 +84,13 @@ public :
 
   UInt_t runtime = 0;
 
-  static const int kNumBuses  = 6;    // Number of buses
-  static const int kNumSDDs   = 64;   // Number of SDDs
+  static const int num_buses  = 6;    // Number of buses
+  static const int num_sdds   = 64;   // Number of SDDs per bus
   
   // Binning for the ADC
-  int num_adc_bins = 10000;
-  const int kMinADC = 0;
-  const int kMaxADC = 10000;
+  int num_adc_bins  = 10000;
+  const int adc_min = 0;
+  const int adc_max = 10000;
 
   enum class CanvasFormat { Default, A4, A5 };
   enum class CanvasOrientation { Default, Landscape, Portrait };
@@ -112,8 +112,8 @@ public :
     
 private:
   // Histograms
-  TH1D *h_adc[kNumBuses][kNumSDDs], *h_adc_raw[kNumBuses][kNumSDDs];
-  TH1D *h_xtalk[kNumBuses][kNumSDDs];
+  TH1D *h_adc[num_buses][num_sdds], *h_adc_raw[num_buses][num_sdds];
+  TH1D *h_xtalk[num_buses][num_sdds];
   TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
 
   static std::map<std::string, double> xray_line_energies;

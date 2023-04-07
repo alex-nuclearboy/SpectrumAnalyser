@@ -2,7 +2,7 @@
 * File:         run_analysis.cpp
 * Author:       Aleksander Khreptak <aleksander.khreptak@lnf.infn.it>
 * Created:      31 Mar 2023
-* Last updated: 05 Apr 2023
+* Last updated: 07 Apr 2023
 *
 * Description:
 * This program performs analysis on SDD data using the SpectrumAnalyser class
@@ -19,10 +19,10 @@
 #include <TFile.h>
 #include <TTree.h>
 
-#include "SpectrumAnalyser.h"
-#include "version.h"
+#include "include/SpectrumAnalyser.h"
+#include "include/version.h"
 
-std::string checkExtension(const std::string& filename);
+std::string CheckExtension(const std::string& filename);
 
 int main(int argc, char* argv[]) {
   // Check the number of command-line arguments
@@ -32,11 +32,11 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  printWelcomeMessage();
+  PrintWelcomeMessage();
 
   // Set the input directory and input file name
   const std::string data_directory  = "${XRAYDATA}";
-  const std::string input_file_name = checkExtension(argv[1]);
+  const std::string input_file_name = CheckExtension(argv[1]);
   const std::string file_date       = input_file_name.substr(0, 8);  
   const std::string input_file_path = data_directory + "/" + file_date 
                                   + "/" + input_file_name;
@@ -80,10 +80,12 @@ int main(int argc, char* argv[]) {
   // Deallocate memory used by the TFile object
   input_file_handle->Close();
 
+  std::cout << "--- END ---" << std::endl;
+
   return 0;
 }
 
-std::string checkExtension(const std::string& filename) {
+std::string CheckExtension(const std::string& filename) {
   if (filename.substr(filename.size() - 5) != ".root") {
     return filename + ".root";
   }
