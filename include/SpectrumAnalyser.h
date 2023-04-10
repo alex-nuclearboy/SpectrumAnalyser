@@ -5,7 +5,7 @@
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
 // Modified on Fri Mar 31 2023 by Aleksander Khreptak
-// Last updated on Fri Apr 7 2023
+// Last updated on Mon Apr 10 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -109,7 +109,10 @@ public :
   void             WriteHistograms(const std::string& filename);
   void             DrawADCSpectra(const std::string& filename);
   void             DrawSDDMap(const std::string& filename);
-    
+  void             FindADCPeaks(
+                      const float& x_min, const float& x_max, const int& factor,
+                      const std::string& filename);
+
 private:
   // Histograms
   TH1D *h_adc[num_buses][num_sdds], *h_adc_raw[num_buses][num_sdds];
@@ -131,12 +134,9 @@ private:
     AddLines(const std::vector<std::string>& lines);
 
   const int kMaxPeaks = 20;
-
   const int kMaxNumPeaksPF  = 15; // Maximum number of peaks that the Peak Finder can detect
-  const int kNumPeaksPF     = triad_peak_energies.size();  // Desired number of peaks to find
-  float init_threshold = 0.01;  // Initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
-  float init_tolerance = 0.05;  // Tolerance to check that the peak assumption is correct (5%) 
-
+  const int kNumPeaksPF     = 3;  // Desired number of peaks to find
+  
   std::string ConvertTime(time_t t);
   bool        CrossTalkTiming(Short_t drift, Short_t drift_pre);
   void        SDDHitMap(int sddnumber, int busnumber, int &column, int &row);
@@ -153,9 +153,7 @@ private:
                   TString& fit_func, int n_peaks, const int kNumGaussParams,
                   const int kNumBkgParams, int* gauss_amp,
                   int* gauss_mean, int* gauss_sigma,
-                  int bkg_p0, int bkg_p1, int bkg_p2);
-  void        FindADCPeaks(
-                  const float& x_min, const float& x_max, const int& factor);
+                  int bkg_p0, int bkg_p1, int bkg_p2);  
   void        FindPeakCandidates(
                   TH1D* histo, const int sigma_pf, 
                   std::vector<std::pair<float, float>>& peak_pos,

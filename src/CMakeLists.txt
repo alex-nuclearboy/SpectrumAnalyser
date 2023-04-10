@@ -13,7 +13,9 @@ add_library(SpectrumAnalyser
     SpectrumAnalyser.cxx
     SpectrumAnalyserCreateHistos.cxx
     SpectrumAnalyserDrawHistos.cxx
-    SpectrumAnalyserWriteHistos.cxx)
+    SpectrumAnalyserWriteHistos.cxx
+    SpectrumAnalyserPeakFinder.cxx
+    SpectrumAnalyserPrecalib.cxx)
 
 include_directories(${INCLUDE_DIR})
 
