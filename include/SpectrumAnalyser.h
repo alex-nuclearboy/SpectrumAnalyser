@@ -114,6 +114,7 @@ public :
   void             FindADCPeaks(
                       const float& x_min, const float& x_max,
                       const std::string& filename);
+  std::vector<Double_t>         SearchPeakCuKa();
 
 private:
   // Histograms

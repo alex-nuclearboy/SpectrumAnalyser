@@ -15,7 +15,7 @@ void SpectrumAnalyser::FindADCPeaks(
   
   const int sigma_pf = 20 / rebin_factor;  // sigma for the Peak Finder (in units of ADC channels)
 
-  const int kMinStats = 1000;
+  const int MIN_STATS = 1000;
 
   TSpectrum spectrum{kMaxNumPeaksPF};
 
@@ -30,11 +30,13 @@ void SpectrumAnalyser::FindADCPeaks(
                 << "] with a statistics of " << histo->GetEntries() << std::endl 
                 << std::endl;
       
-      if (histo->GetEntries() < kMinStats) {
+      if (histo->GetEntries() < MIN_STATS) {
         std::cout << "NOT ENOUGH STATISTICS (" << histo->GetEntries() 
                   << "). SKIPPING..." << std::endl;
         continue;
       }
+
+      histo->Rebin(2);
 
       histo->GetXaxis()->SetRangeUser(x_min, x_max);
 
@@ -47,8 +49,6 @@ void SpectrumAnalyser::FindADCPeaks(
                   << std::endl;
         continue;
       }
-
-      //int num_found = peak_pos.size();
 
       std::cout << peak_pos.size() << " candidate peaks have been identified:" 
                 << std::endl;
@@ -70,9 +70,9 @@ void SpectrumAnalyser::FindADCPeaks(
       std::cout << "Checking peak triads for optimal calibration..." << std::endl;
       GetCalibrationParameters(
           peak_pos, peak_pos.size(), energy_ratio, slope, offset, highest_peak);
-
+/*
       FitSpectrum(histo, peak_energies, slope, offset, peak_energies.size(),
-          highest_peak, bus_idx, sdd_idx, filename);
+          highest_peak, bus_idx, sdd_idx, filename); */
 
       histo->Delete();
     }

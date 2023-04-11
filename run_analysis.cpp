@@ -77,7 +77,8 @@ int main(int argc, char* argv[]) {
   analyser.DrawADCSpectra(output_file_name);
   analyser.DrawSDDMap(output_file_name);
 
-  analyser.FindADCPeaks(1700,3700,output_file_name);
+  //analyser.FindADCPeaks(1700,3700,output_file_name);
+  analyser.SearchPeakCuKa();
 
   // Deallocate memory used by the TFile object
   input_file_handle->Close();

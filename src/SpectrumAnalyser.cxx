@@ -107,7 +107,6 @@ void SpectrumAnalyser::Loop()
   //// Peak Finder ////
   std::vector<std::string> lines = {"TiKb"};
   AddLines(lines);
-  
 }
 
 std::string SpectrumAnalyser::ConvertTime(time_t t)

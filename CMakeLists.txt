@@ -24,6 +24,7 @@ add_executable(run_analysis
     src/SpectrumAnalyserWriteHistos.cxx
     src/SpectrumAnalyserPeakFinder.cxx
     src/SpectrumAnalyserPrecalib.cxx
+    src/SpectrumAnalyserSearchPeaks.cxx
     run_analysis.cpp)
 
 # Link ROOT libraries
