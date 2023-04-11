@@ -5,7 +5,7 @@
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
 // Modified on Fri Mar 31 2023 by Aleksander Khreptak
-// Last updated on Mon Apr 10 2023
+// Last updated on Tue Apr 11 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -88,9 +88,11 @@ public :
   static const int num_sdds   = 64;   // Number of SDDs per bus
   
   // Binning for the ADC
-  int num_adc_bins  = 10000;
+  const int num_adc_bins  = 10000;
   const int adc_min = 0;
   const int adc_max = 10000;
+
+  const int rebin_factor = 4;
 
   enum class CanvasFormat { Default, A4, A5 };
   enum class CanvasOrientation { Default, Landscape, Portrait };
@@ -105,12 +107,12 @@ public :
   virtual Bool_t   Notify();
   virtual void     Show(Long64_t entry = -1);
 
-  void             InitHistograms(int rebin_factor = 1);
+  void             InitHistograms();
   void             WriteHistograms(const std::string& filename);
   void             DrawADCSpectra(const std::string& filename);
   void             DrawSDDMap(const std::string& filename);
   void             FindADCPeaks(
-                      const float& x_min, const float& x_max, const int& factor,
+                      const float& x_min, const float& x_max,
                       const std::string& filename);
 
 private:

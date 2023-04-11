@@ -2,7 +2,7 @@
 * File:         run_analysis.cpp
 * Author:       Aleksander Khreptak <aleksander.khreptak@lnf.infn.it>
 * Created:      31 Mar 2023
-* Last updated: 10 Apr 2023
+* Last updated: 11 Apr 2023
 *
 * Description:
 * This program performs analysis on SDD data using the SpectrumAnalyser class
@@ -65,9 +65,7 @@ int main(int argc, char* argv[]) {
   // Create an instance of SpectrumAnalyser and analyse the events in the TTree
   SpectrumAnalyser analyser(tree);
 
-  int rebin_factor = 4;
-  
-  analyser.InitHistograms(rebin_factor);
+  analyser.InitHistograms();
 
   analyser.Loop();
   
@@ -79,7 +77,7 @@ int main(int argc, char* argv[]) {
   analyser.DrawADCSpectra(output_file_name);
   analyser.DrawSDDMap(output_file_name);
 
-  analyser.FindADCPeaks(1700,3700,rebin_factor,output_file_name);
+  analyser.FindADCPeaks(1700,3700,output_file_name);
 
   // Deallocate memory used by the TFile object
   input_file_handle->Close();

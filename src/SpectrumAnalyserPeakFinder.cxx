@@ -3,8 +3,7 @@
 #include <TSpectrum.h>
 
 void SpectrumAnalyser::FindADCPeaks(
-    const float& x_min, const float& x_max, const int& factor,
-    const std::string& filename)
+    const float& x_min, const float& x_max, const std::string& filename)
 {
   const float energy_ratio = (triad_peak_energies[2] - triad_peak_energies[1]) /
                              (triad_peak_energies[1] - triad_peak_energies[0]);
@@ -14,7 +13,7 @@ void SpectrumAnalyser::FindADCPeaks(
   float init_threshold = 0.01; // initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
   float init_tolerance = 0.05; // tolerance to check that the peak assumption is correct (5%)
   
-  const int sigma_pf = 20 / factor;  // sigma for the Peak Finder (in units of ADC channels)
+  const int sigma_pf = 20 / rebin_factor;  // sigma for the Peak Finder (in units of ADC channels)
 
   const int kMinStats = 1000;
 

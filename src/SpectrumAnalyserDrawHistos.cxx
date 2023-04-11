@@ -88,6 +88,10 @@ void SpectrumAnalyser::DrawSpectrum(TCanvas* canvas)
       auto hist2 = dynamic_cast<TH1D*>(h_adc[bus_idx][sdd_idx]->Clone());
       auto hist3 = dynamic_cast<TH1D*>(h_xtalk[bus_idx][sdd_idx]->Clone());
 
+      hist1->Rebin(rebin_factor);
+      hist2->Rebin(rebin_factor);
+      hist3->Rebin(rebin_factor);
+
       // Create a new page for every 8 SDDs
       if (sdd_idx % 8 == 0) {
         canvas->Clear();
@@ -101,6 +105,7 @@ void SpectrumAnalyser::DrawSpectrum(TCanvas* canvas)
           Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", 
                 bus_idx+1, sdd_idx+1));
       hist1->GetXaxis()->SetRangeUser(kMinX, kMaxX);
+      hist1->GetYaxis()->SetTitle(Form("counts / %d channels", rebin_factor));    
       hist1->UseCurrentStyle();
       hist1->SetLineColor(kBlue);
       hist2->SetLineColor(kRed);
