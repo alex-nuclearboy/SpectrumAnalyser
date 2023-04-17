@@ -107,8 +107,8 @@ void SpectrumAnalyser::FitSpectrum(
   file.open("output/files/peaks_" + filename + ".dat", std::ios::app);
   file << Form("%d  %d  %f  %f  %f  %f", bus_idx + 1, sdd_idx + 1, 
       fit_func->GetParameter(1),
-      fit_func->GetParameter(4),
+      fit_func->GetParameter(0),
       fit_func->GetParameter(7),
-      fit_func->GetParameter(10)) << std::endl;
+      fit_func->GetParameter(6)) << std::endl;
   file.close();
 }

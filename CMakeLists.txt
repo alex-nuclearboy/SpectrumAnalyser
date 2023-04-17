@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # Set the project name
-project(SpectrumAnalyser VERSION 2.1)
+project(SpectrumAnalyser VERSION 2.2)
 
 # Set C++ standard to C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -24,7 +24,6 @@ add_executable(run_analysis
     src/SpectrumAnalyserWriteHistos.cxx
     src/SpectrumAnalyserPeakFinder.cxx
     src/SpectrumAnalyserPrecalib.cxx
-    src/SpectrumAnalyserSearchPeaks.cxx
     run_analysis.cpp)
 
 # Link ROOT libraries

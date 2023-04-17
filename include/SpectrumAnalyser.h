@@ -5,7 +5,7 @@
 // found on file: 20220611_0024_0611_0315_xray_25kv_50ua_tube1_cal.root
 //
 // Modified on Fri Mar 31 2023 by Aleksander Khreptak
-// Last updated on Tue Apr 11 2023
+// Last updated on Mon Apr 17 2023
 //////////////////////////////////////////////////////////
 
 #ifndef SPECTRUM_ANALYSER_H
@@ -114,11 +114,13 @@ public :
   void             FindADCPeaks(
                       const float& x_min, const float& x_max,
                       const std::string& filename);
-  std::vector<Double_t>         SearchPeakCuKa();
+  void             SearchPeaks(const std::string& file_name);
+  void             DrawPFSpectra(const std::string& filename);
 
 private:
   // Histograms
   TH1D *h_adc[num_buses][num_sdds], *h_adc_raw[num_buses][num_sdds];
+  TH1D *h_adc_pf[num_buses][num_sdds];
   TH1D *h_xtalk[num_buses][num_sdds];
   TH2D *h_sdd_map, *h_sdd_rate, *h_sdd_rate_sig, *h_sdd_rate_noise;
 
@@ -150,6 +152,7 @@ private:
                   CanvasOrientation orientation = CanvasOrientation::Default,
                   int width = 800, int height = 600);
   void        DrawSpectrum(TCanvas* canvas);
+  void        DrawPFSpectrum(TCanvas* canvas);
   void        Draw2DHistogram(TH2D* hist, const std::string& title);
 
   void        SetPreCalibFitFunction(
@@ -170,6 +173,16 @@ private:
                   const float slope, const float offset, const int num_peaks,
                   const float highest_peak, const int bus_idx, const int sdd_idx,
                   const std::string& filename);
+  float       FindCuKaPeak(TH1D *histo);
+  float       FindTiKaPeak(TH1D *histo);
+  float       FitCuKaPeak(TH1D *histo, float center);
+  float       FitTiKaPeak(TH1D *histo, float center);
+  void        WritePeaksToFile(
+                  std::ofstream &file, 
+                  std::map<std::string, float> &CuKas,
+                  std::map<std::string, float> &TiKas, 
+                  std::map<std::string, std::vector<float>> &centers);
+
 };
 
 #endif  // SPECTRUM_ANALYSER_H

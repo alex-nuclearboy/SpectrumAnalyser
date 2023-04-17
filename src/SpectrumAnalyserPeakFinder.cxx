@@ -1,167 +1,197 @@
 #include "../include/SpectrumAnalyser.h"
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <map>
+#include <algorithm>
+#include <cmath>
+
+#include <TH1D.h>
 #include <TSpectrum.h>
+#include <TF1.h>
+#include <TCanvas.h>
+#include <TPDF.h>
+#include "TError.h"
 
-void SpectrumAnalyser::FindADCPeaks(
-    const float& x_min, const float& x_max, const std::string& filename)
+void SpectrumAnalyser::SearchPeaks(const std::string& file_name)
 {
-  const float energy_ratio = (triad_peak_energies[2] - triad_peak_energies[1]) /
-                             (triad_peak_energies[1] - triad_peak_energies[0]);
+  gErrorIgnoreLevel = kError;
 
-  std::cout << "energy_ratio = " << energy_ratio << std::endl;
+  std::ofstream file;
 
-  float init_threshold = 0.01; // initial threshold parameter for the Peak Finder (std in TSpectrum is 0.05)
-  float init_tolerance = 0.05; // tolerance to check that the peak assumption is correct (5%)
-  
-  const int sigma_pf = 20 / rebin_factor;  // sigma for the Peak Finder (in units of ADC channels)
+  double threshold = 0.01;
+  // Create a TSpectrum objects to search for peaks in the histogram
+  auto spectrum_Cu = std::make_unique<TSpectrum>(4);
+  auto spectrum_Ti = std::make_unique<TSpectrum>(2);
 
-  const int MIN_STATS = 1000;
+  std::map<std::string, float> CuKas;
+  std::map<std::string, float> TiKas; 
+  std::map<std::string, std::vector<float>> centers;
 
-  TSpectrum spectrum{kMaxNumPeaksPF};
+  TF1* fit_Cu; 
+  TF1* fit_Ti;
 
-  for(int bus_idx = 0; bus_idx < num_buses; ++bus_idx) {
-    for(int sdd_idx = 0; sdd_idx < num_sdds; ++sdd_idx) {
-      if (!h_adc[bus_idx][sdd_idx]) continue;
-
-      auto histo = static_cast<TH1D*>(h_adc[bus_idx][sdd_idx]->Clone("histo"));
-
-      std::cout << std::endl << "--- STARTING PEAK FINDER ---" << std::endl;
-      std::cout << "for [bus#" << bus_idx + 1 << ", sdd#" << sdd_idx + 1 
-                << "] with a statistics of " << histo->GetEntries() << std::endl 
-                << std::endl;
+  for (int bus_id = 0; bus_id < num_buses; ++bus_id) {
+    for (int sdd_id = 0; sdd_id < num_sdds; ++sdd_id) {
+      // Clone the histogram to avoid modifying the original
       
-      if (histo->GetEntries() < MIN_STATS) {
-        std::cout << "NOT ENOUGH STATISTICS (" << histo->GetEntries() 
-                  << "). SKIPPING..." << std::endl;
-        continue;
-      }
-
-      histo->Rebin(2);
-
-      histo->GetXaxis()->SetRangeUser(x_min, x_max);
-
-      std::vector<std::pair<float, float>> peak_pos;
-
-      FindPeakCandidates(histo, sigma_pf, peak_pos, spectrum, init_threshold);
-
-      if (peak_pos.empty()) {
-        std::cout << "PEAK FINDER COULD NOT FIND ANY PEAKS. SKIPPING..." 
-                  << std::endl;
-        continue;
-      }
-
-      std::cout << peak_pos.size() << " candidate peaks have been identified:" 
-                << std::endl;
+      h_adc_pf[bus_id][sdd_id] =
+          dynamic_cast<TH1D*>(h_adc[bus_id][sdd_id]->Clone());
+      if (h_adc_pf[bus_id][sdd_id]->GetEntries() <= 1000) continue;
+      h_adc_pf[bus_id][sdd_id]->Rebin(rebin_factor);
       
-      // Sort the peaks based on their x positions
-      std::sort(peak_pos.begin(), peak_pos.end(),
-          [](const auto& a, const auto& b) { return a.first < b.first; });
+      // CuKa
+      h_adc_pf[bus_id][sdd_id]->GetXaxis()->SetRangeUser(1700, 3700);
 
-      // Print found peaks
-      for (int i = 0; i < peak_pos.size(); ++i) {
-        std::cout << "- peak#" << i + 1 << ": position = "
-                  << peak_pos[i].first << " [ADC], intensity = "
-                  << peak_pos[i].second << std::endl;
+      const int num_peaks_Cu =
+          spectrum_Cu->Search(h_adc_pf[bus_id][sdd_id], 5, "", threshold);
+      std::map<float, float> peaks_bin_Cu;
+      for (int i = 0; i < num_peaks_Cu; i++) {
+        float bin_pos = spectrum_Cu->GetPositionX()[i];
+        if (bin_pos > 2500 && bin_pos < 3500) {
+          float bin_pos_cont = h_adc_pf[bus_id][sdd_id]->GetBinContent(
+              h_adc_pf[bus_id][sdd_id]->GetXaxis()->FindBin(bin_pos));
+              peaks_bin_Cu[bin_pos] = bin_pos_cont;
+        } else {
+          peaks_bin_Cu[bin_pos] = 0;
+        }
       }
-
-      float slope = 0.0;
-      float offset = 0.0;
-      float highest_peak = 0.0;
-      std::cout << "Checking peak triads for optimal calibration..." << std::endl;
-      GetCalibrationParameters(
-          peak_pos, peak_pos.size(), energy_ratio, slope, offset, highest_peak);
-/*
-      FitSpectrum(histo, peak_energies, slope, offset, peak_energies.size(),
-          highest_peak, bus_idx, sdd_idx, filename); */
-
-      histo->Delete();
-    }
-  }
-}
-
-void SpectrumAnalyser::FindPeakCandidates(
-    TH1D* histo, const int sigma_pf, std::vector<std::pair<float, float>>& peak_pos,
-    TSpectrum& spectrum, const float init_threshold)
-{
-  spectrum.Search(histo, sigma_pf, "", init_threshold);
-
-  int num_tries = 0;
-  int num_found = 0;
-  float peak_threshold = init_threshold;
-
-  while(num_found < kNumPeaksPF && num_tries < 10) {
-    num_found = spectrum.Search(histo, sigma_pf, "", peak_threshold);    
-    peak_threshold *= 0.1;  // Initial = 0.01. It changes until it finds peaks
-    num_tries++;
-  }
-
-  peak_pos.reserve(num_found);
-  double* peak_x = spectrum.GetPositionX();
-  double* peak_y = spectrum.GetPositionY();
-
-  for (int i = 0; i < num_found; ++i) {
-    peak_pos.emplace_back(static_cast<float>(peak_x[i]), static_cast<float>(peak_y[i]));
-  }
-
-}
-
-void SpectrumAnalyser::GetCalibrationParameters(
-    const std::vector<std::pair<float, float>>& peak_pos,
-    const int& num_found, const float& energy_ratio,
-    float& slope, float& offset, float& highest_peak) 
-{
-  // Make a triad from all the peaks found:
-  int peak_idx[3] = {-1, -1, -1};  
- 
-  for (int i0 = 0; i0 < num_found && peak_idx[2] == -1; i0++) {
-    for (int i1 = i0 + 1; i1 < num_found && peak_idx[2] == -1; i1++) {
-      for (int i2 = i1 + 1; i2 < num_found && peak_idx[2] == -1; i2++) {        
-        float adc_ratio = (peak_pos[i2].first - peak_pos[i1].first) / 
-                          (peak_pos[i1].first - peak_pos[i0].first);        
-
-        float peak_tolerance = 0.05;  // 5%
-        bool tolerance_pass = fabs(1.0 - (energy_ratio / adc_ratio)) 
-                            < peak_tolerance;
-        if (!tolerance_pass) continue;
-
-        // Get the Peak Finder calibration offset and slope
-        float adc_diff = peak_pos[i0].first - peak_pos[i1].first;
-        float energy_diff = triad_peak_energies[0] - triad_peak_energies[1];
-        slope  = energy_diff / adc_diff;
-        offset = -1.0 * peak_pos[i0].first * slope + triad_peak_energies[0];
+      if (!peaks_bin_Cu.empty()) {
+        // Sort the peaks by their intensity
+        std::multimap<float, float, std::greater<float>> sorted_peaks;
+        for (const auto& peak : peaks_bin_Cu) {
+          sorted_peaks.insert({peak.second, peak.first});
+        }
+        // Get the highest peak
+        float CuKa_center = sorted_peaks.begin()->second;
         
-        // define an acceptable slope and offset
-        float min_slope = 2.9, max_slope = 3.9;
-        float min_offset = -3000, max_offset = -1000;
-        if ((slope > max_slope) || (slope < min_slope) || 
-            (offset > max_offset) || (offset < min_offset)) {
-            continue;
-        }        
-        peak_idx[0] = i0;
-        peak_idx[1] = i1;
-        peak_idx[2] = i2;
+        //TF1 fit_Cu("m1", "gaus(0)+pol0(3)", CuKa_center - 70, CuKa_center + 70);
+        fit_Cu = new TF1("m1", "gaus(0)+pol0(3)", CuKa_center - 70, CuKa_center + 70);
+        fit_Cu->SetLineColor(2);
+        fit_Cu->SetParameter(0, h_adc_pf[bus_id][sdd_id]->GetMaximum());
+        fit_Cu->SetParLimits(0, 0, 1.5 * h_adc_pf[bus_id][sdd_id]->GetMaximum());
+        fit_Cu->SetParameter(1, CuKa_center);
+        fit_Cu->SetParLimits(1, CuKa_center - 30, CuKa_center + 30);
+        fit_Cu->SetParLimits(2, 10, 120);
+        fit_Cu->SetParameter(2, 80);        
+        h_adc_pf[bus_id][sdd_id]->Fit(fit_Cu, "RQ");
+        float fit_Cu_chi2 = fit_Cu->GetChisquare() / fit_Cu->GetNDF();
+        std::string hist_name = "bus_" + std::to_string(bus_id+1) + "_sdd_" + std::to_string(sdd_id+1);
+        CuKas[hist_name] = fit_Cu->GetParameter(1);
+        std::vector<double> center = { fit_Cu->GetParameter(1) };
+        centers[hist_name].push_back(fit_Cu->GetParameter(1));
+
+        if (fit_Cu_chi2 > 2) {
+          std::cout << "WARNING: Chi^2 / NDF for Cu Ka [bus" << bus_id + 1 
+                    << ", sdd" << sdd_id << "] > 2 (" << fit_Cu_chi2 
+                    << ")" << std::endl;
+        }
       }
+
+      // TiKa
+      h_adc_pf[bus_id][sdd_id]->GetXaxis()->SetRangeUser(1700, 2400);
+
+      const int num_peaks_Ti =
+          spectrum_Ti->Search(h_adc_pf[bus_id][sdd_id], 5, "nobackground", threshold);
+
+      std::map<float, float> peaks_bin_Ti;
+      float TiKa_center = 0;
+      for (int i = 0; i < num_peaks_Ti; i++) {
+        float bin_pos = spectrum_Ti->GetPositionX()[i];
+        if (bin_pos > 1700 && bin_pos < 2300) {
+          float bin_pos_cont = h_adc_pf[bus_id][sdd_id]->GetBinContent(
+              h_adc_pf[bus_id][sdd_id]->GetXaxis()->FindBin(bin_pos));
+              peaks_bin_Ti[bin_pos] = bin_pos_cont;
+        } else {
+          peaks_bin_Ti[bin_pos] = 0;
+        }
+      }
+      if (!peaks_bin_Ti.empty()) {
+        // Sort the peaks by their intensity
+        std::multimap<float, float, std::greater<float>> sorted_peaks;
+        for (const auto& peak : peaks_bin_Ti) {
+          sorted_peaks.insert({peak.second, peak.first});
+        }
+        // Get the highest peak
+        TiKa_center = sorted_peaks.begin()->second;
+        //float highest_peak_cont = sorted_peaks.begin()->first;
+        //TF1 fit_Ti("m1", "gaus(0)+pol0(3)", TiKa_center - 70, TiKa_center + 70);
+        fit_Ti = new TF1("m2", "gaus(0)+pol0(3)", TiKa_center - 70, TiKa_center + 70);
+        fit_Ti->SetLineColor(2);
+        fit_Ti->SetParameter(0, h_adc_pf[bus_id][sdd_id]->GetMaximum());
+        fit_Ti->SetParLimits(0, 0, 1.5 * h_adc_pf[bus_id][sdd_id]->GetMaximum());
+        fit_Ti->SetParameter(1, TiKa_center);
+        fit_Ti->SetParLimits(1, TiKa_center - 30, TiKa_center + 30);
+        fit_Ti->SetParLimits(2, 10, 120);
+        fit_Ti->SetParameter(2, 80);        
+        h_adc_pf[bus_id][sdd_id]->Fit(fit_Ti, "RQ+");
+        float fit_Ti_chi2 = fit_Ti->GetChisquare() / fit_Ti->GetNDF();
+        std::string hist_name = "bus_" + std::to_string(bus_id+1) + "_sdd_" + std::to_string(sdd_id+1);
+        TiKas[hist_name] = fit_Ti->GetParameter(1);
+        std::vector<double> center = { fit_Ti->GetParameter(1) };
+        centers[hist_name].push_back(fit_Ti->GetParameter(1));
+
+        if (fit_Ti_chi2 > 2) {
+          std::cout << "WARNING: Chi^2 / NDF for Ti Ka [bus" << bus_id + 1 
+                    << ", sdd" << sdd_id << "] > 2 (" << fit_Ti_chi2 
+                    << ")" << std::endl;
+        }
+      }
+
+      file.open(
+          "output/files/peaks_TiKa_CuKa" + file_name + ".dat", std::ios::app);
+      file << Form("%d  %d  %f  %f", bus_id + 1, sdd_id + 1, 
+          fit_Ti->GetParameter(1), fit_Cu->GetParameter(1)) << std::endl;
+      file.close();
     }
   }
+  DrawPFSpectra(file_name);
+}
 
-  if (peak_idx[2] == -1) {
-    std::cout << "No valid triad has been found. Unable to calculate calibration parameters." 
-              << std::endl;
-    return;
-  }
+void SpectrumAnalyser::DrawPFSpectra(const std::string& file_name) 
+{   
+  auto canvas = CreateCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
+  auto pdf = std::make_unique<TPDF>(
+      Form("output/plots/PeakFinder_spectra_%s.pdf", file_name.c_str()));
+  canvas->SetName("canvas_PF");
+  DrawPFSpectrum(canvas);
+  pdf->Close();
+  canvas->Close();
+  std::cout << "Peak Finder spectra have been saved to output/plots/PeakFinder_spectra_" 
+            << file_name.c_str() << ".pdf" << std::endl;
+}
 
-  std::cout << "Optimal peak triad has been found: " << peak_idx[0] + 1 << " "
-            << peak_idx[1] + 1 << " " << peak_idx[2] + 1 << std::endl;
-  std::cout << "Calculating calibration parameters..." << std::endl;
-  std::cout << "Offset = " << offset << ", slope = " << slope << std::endl;
+void SpectrumAnalyser::DrawPFSpectrum(TCanvas* canvas)
+{
+  const int num_columns = 2;
+  const int num_rows    = 4;
+  const int x_min = 1500;
+  const int x_max = 4500;
 
-  // Find also the highest height among the selected ones  
-  if (peak_idx[0] > -1) {
-    if (peak_pos[peak_idx[0]].second > highest_peak)
-      highest_peak = peak_pos[peak_idx[0]].second;
-    if (peak_pos[peak_idx[1]].second > highest_peak)
-      highest_peak = peak_pos[peak_idx[1]].second;
-    if (peak_pos[peak_idx[2]].second > highest_peak)
-      highest_peak = peak_pos[peak_idx[2]].second;
+  for (int bus_id = 0; bus_id < num_buses; ++bus_id) {
+    for (int sdd_id = 0; sdd_id < num_sdds; ++sdd_id) {     
+      h_adc_pf[bus_id][sdd_id]->GetXaxis()->SetRangeUser(x_min, x_max);
+      if (h_adc_pf[bus_id][sdd_id]->GetEntries() <= 100) continue; // skip empty histo
+
+      // Create a new page for every 8 SDDs
+      if (sdd_id % 8 == 0) {
+        canvas->Clear();
+        canvas->Divide(num_columns, num_rows);
+      }
+      // Add histograms to the canvas
+      canvas->cd((sdd_id % 8) + 1);
+      gPad->SetLogy();      
+      h_adc_pf[bus_id][sdd_id]->SetTitle(
+          Form("Fluorescence x-ray spectrum (BUS: %d, SDD: %d)", 
+                bus_id+1, sdd_id+1));      
+      h_adc_pf[bus_id][sdd_id]->GetYaxis()->SetTitle(
+          Form("counts / %d channels", rebin_factor));    
+      h_adc_pf[bus_id][sdd_id]->UseCurrentStyle();
+      //h_adc_pf[bus_id][sdd_id]->SetLineColor(kBlue);
+      h_adc_pf[bus_id][sdd_id]->Draw();      
+      canvas->Update();
+    }
   }
 }

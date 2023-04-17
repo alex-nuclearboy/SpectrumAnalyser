@@ -67,6 +67,7 @@ void SpectrumAnalyser::DrawADCSpectra(const std::string& file_name)
   auto canvas = CreateCanvas(CanvasFormat::A4, CanvasOrientation::Portrait);
   auto pdf = std::make_unique<TPDF>(
       Form("output/plots/hADC_spectra_%s.pdf", file_name.c_str()));
+  canvas->SetName("canvas_ADC");
   DrawSpectrum(canvas);
   pdf->Close();
   canvas->Close();
@@ -132,6 +133,7 @@ void SpectrumAnalyser::DrawSDDMap(const std::string& file_name)
   // Create a canvas and draw histograms
   static auto canvas = CreateCanvas(CanvasFormat::A4, 
                                     CanvasOrientation::Landscape);
+  canvas->SetName("canvas_map");
   canvas->Clear();
   canvas->Divide(2, 2);
   canvas->cd(1);

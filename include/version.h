@@ -11,7 +11,7 @@ void PrintWelcomeMessage() {
   std::cout << "*           Welcome to the            *" << std::endl;
   std::cout << "*    SIDDHARTA-2 Spectrum Analyser    *" << std::endl;
   std::cout << "*                                     *" << std::endl;
-  std::cout << "*     Version 2.1.2   11 Apr 2023     *" << std::endl;
+  std::cout << "*     Version 2.2.1   17 Apr 2023     *" << std::endl;
   std::cout << "*                                     *" << std::endl;
   std::cout << "***************************************" << std::endl;
   std::cout << std::endl;
