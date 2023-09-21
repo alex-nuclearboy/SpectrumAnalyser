@@ -18,7 +18,7 @@ Cross-platform build-system generator
 
 ## Necessary environment variables
 
-Path where data from experiment are located:
+To use the software, an environment variable specifying the path to the experiment data files must be set:
 
       XRAYDATA
 
