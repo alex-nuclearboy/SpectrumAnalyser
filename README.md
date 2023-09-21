@@ -30,6 +30,7 @@ Path where data from experiment are located:
       cd SDD-build
       cmake ..
       make
+      cd ..
 
 ## Usage
 
