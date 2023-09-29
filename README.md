@@ -16,13 +16,19 @@ Cross-platform build-system generator
 
       CMake
 
-## Necessary environment variables
+## Environment Configuration
 
-To use the software, an environment variable specifying the path to the experiment data files must be set:
+Before using the software, it's essential to configure an environment variable named `XRAYDATA`. This variable points to the location of the experiment data files.
 
-      XRAYDATA
+For Unix-like operating systems, such as Linux, you can set the `XRAYDATA` environment variable by adding the following line to your shell profile file (e.g., `.bashrc`):
+
+      export XRAYDATA=/path/to/datafiles
+
+Please ensure to replace `/path/to/datafiles` with the actual path where your ROOT files are stored.
 
 ## Installation & Compilation
+
+To install and compile this software, follow these steps:
 
       git clone https://github.com/alex-nuclearboy/SpectrumAnalyser.git
       cd SpectrumAnalyser
